@@ -44,7 +44,9 @@ import com.example.hearnear.ui.screens.UserScreen
 enum class HearNearScreen(@StringRes val title: Int, @DrawableRes val imageRes: Int) {
     Start(title = R.string.start, imageRes = R.drawable.rounded_adb_24),
     Map(title = R.string.map, imageRes = R.drawable.rounded_adb_24),
-    Profile(title = R.string.profile, imageRes = R.drawable.rounded_adb_24)
+    Profile(title = R.string.profile, imageRes = R.drawable.rounded_adb_24),
+    Login(title = R.string.login, imageRes = R.drawable.rounded_adb_24),
+    Register(title = R.string.register, imageRes = R.drawable.rounded_adb_24)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
