@@ -1,10 +1,13 @@
 package com.example.hearnear
 
 import android.Manifest
+import android.content.ComponentName
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -16,6 +19,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -39,12 +43,12 @@ import org.maplibre.android.maps.Style
 import org.maplibre.android.plugins.annotation.SymbolManager
 import org.maplibre.android.plugins.annotation.SymbolOptions
 
-
 class MainActivity : ComponentActivity() {
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         // Inicjalizacja MapLibre z kluczem API
         MapLibre.getInstance(
             applicationContext,
@@ -59,6 +63,13 @@ class MainActivity : ComponentActivity() {
                 }
                 val authState by authViewModel.authState.collectAsState()
 
+                // Sprawdź i uruchom NotificationListener gdy użytkownik jest zalogowany
+                LaunchedEffect(authState.isLoggedIn) {
+                    if (authState.isLoggedIn) {
+                        checkAndEnableNotificationListener()
+                    }
+                }
+
                 if (authState.isLoggedIn) {
                     HearNearApp(authViewModel = authViewModel)
                 } else {
@@ -66,5 +77,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun checkAndEnableNotificationListener() {
+        if (!isNotificationServiceEnabled()) {
+            // Jeśli NotificationListener nie jest włączony, otwórz ustawienia
+            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+            startActivity(intent)
+        }
+    }
+
+    private fun isNotificationServiceEnabled(): Boolean {
+        val enabledListeners = Settings.Secure.getString(
+            contentResolver,
+            "enabled_notification_listeners"
+        )
+        val packageName = packageName
+        return enabledListeners?.contains(packageName) == true
     }
 }

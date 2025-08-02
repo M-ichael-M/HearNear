@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.hearnear.ui.components.NotificationPermissionChecker
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -54,6 +55,7 @@ fun HomeScreen() {
     }
 
     // UI
+    NotificationPermissionChecker()
     Column(
         modifier = Modifier
             .fillMaxSize()
