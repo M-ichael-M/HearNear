@@ -1,4 +1,5 @@
 package com.example.hearnear.ui
+
 import android.content.Context
 import android.os.Build
 import androidx.annotation.DrawableRes
@@ -202,7 +203,7 @@ fun HearNearApp(
                     MapScreen()
                 }
                 composable(HearNearScreen.Profile.name) {
-                    UserScreen()
+                    UserScreen(authViewModel = authViewModel)
                 }
                 composable(HearNearScreen.Login.name) {
                     LoginScreen(
