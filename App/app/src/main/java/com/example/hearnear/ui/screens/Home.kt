@@ -27,34 +27,7 @@ import com.example.hearnear.ui.components.NotificationPermissionChecker
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun HomeScreen() {
-    val context = LocalContext.current
 
-    // stan przechowujący aktualne info o utworze
-    var track by remember { mutableStateOf("—") }
-    var artist by remember { mutableStateOf("—") }
-
-    // zarejestruj BroadcastReceiver
-    DisposableEffect(context) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                track  = intent.getStringExtra("track")  ?: "—"
-                artist = intent.getStringExtra("artist") ?: "—"
-            }
-        }
-        val filter = IntentFilter("com.example.hearnear.NOW_PLAYING")
-        ContextCompat.registerReceiver(
-            context,
-            receiver,
-            filter,
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-
-        onDispose {
-            context.unregisterReceiver(receiver)
-        }
-    }
-
-    // UI
     NotificationPermissionChecker()
     Column(
         modifier = Modifier
@@ -63,8 +36,6 @@ fun HomeScreen() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Teraz gra:", style = MaterialTheme.typography.titleLarge)
-        Text(text = track,  fontSize = 24.sp, modifier = Modifier.padding(top = 8.dp))
-        Text(text = artist, fontSize = 20.sp, modifier = Modifier.padding(top = 4.dp))
+        Text("Hear Near", style = MaterialTheme.typography.titleLarge)
     }
 }
