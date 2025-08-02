@@ -1,5 +1,4 @@
 package com.example.hearnear.ui
-
 import android.content.Context
 import android.os.Build
 import androidx.annotation.DrawableRes
@@ -38,8 +37,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.hearnear.R
 import com.example.hearnear.ui.screens.HomeScreen
+import com.example.hearnear.ui.screens.LoginScreen
 import com.example.hearnear.ui.screens.MapScreen
+import com.example.hearnear.ui.screens.RegisterScreen
 import com.example.hearnear.ui.screens.UserScreen
+import com.example.hearnear.viewmodel.AuthViewModel
 
 enum class HearNearScreen(@StringRes val title: Int, @DrawableRes val imageRes: Int) {
     Start(title = R.string.start, imageRes = R.drawable.rounded_adb_24),
@@ -60,7 +62,11 @@ fun HearNearAppBar(
     TopAppBar(
         title = {
             Text(
-                text = stringResource(currentScreen.title),
+                text = when (currentScreen) {
+                    HearNearScreen.Login -> "Logowanie"
+                    HearNearScreen.Register -> "Rejestracja"
+                    else -> stringResource(currentScreen.title)
+                },
                 color = MaterialTheme.colorScheme.onPrimary
             )
         },
@@ -88,6 +94,11 @@ fun HearNearBottomBar(
     currentScreen: HearNearScreen,
     modifier: Modifier = Modifier
 ) {
+    // Ukryj bottom bar dla ekranów logowania i rejestracji
+    if (currentScreen == HearNearScreen.Login || currentScreen == HearNearScreen.Register) {
+        return
+    }
+
     Surface(
         shadowElevation = 4.dp,
         color = MaterialTheme.colorScheme.onPrimary,
@@ -112,7 +123,7 @@ fun HearNearBottomBar(
                 Icon(
                     painter = painterResource(id = HearNearScreen.Start.imageRes),
                     contentDescription = stringResource(R.string.home),
-                    tint = MaterialTheme.colorScheme.onSurface // Nowy kolor ikon
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -129,7 +140,7 @@ fun HearNearBottomBar(
                 Icon(
                     painter = painterResource(id = HearNearScreen.Map.imageRes),
                     contentDescription = stringResource(R.string.map),
-                    tint = MaterialTheme.colorScheme.onSurface // Nowy kolor ikon
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -146,7 +157,7 @@ fun HearNearBottomBar(
                 Icon(
                     painter = painterResource(id = HearNearScreen.Profile.imageRes),
                     contentDescription = stringResource(R.string.profile),
-                    tint = MaterialTheme.colorScheme.onSurface // Nowy kolor ikon
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -156,49 +167,65 @@ fun HearNearBottomBar(
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun HearNearApp(
+    authViewModel: AuthViewModel,
     navController: NavController = rememberNavController(),
 ) {
-        val backStackEntry by navController.currentBackStackEntryAsState()
-        val currentScreen = HearNearScreen.valueOf(
-            backStackEntry?.destination?.route ?: HearNearScreen.Start.name
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentScreen = HearNearScreen.valueOf(
+        backStackEntry?.destination?.route ?: HearNearScreen.Start.name
+    )
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        HearNearAppBar(
+            currentScreen = currentScreen,
+            canNavigateBack = navController.previousBackStackEntry != null,
+            navigateUp = { navController.popBackStack() },
+            modifier = Modifier.fillMaxWidth()
         )
 
-        Column(
-            modifier = Modifier.fillMaxSize()
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
         ) {
-            HearNearAppBar(
-                currentScreen = currentScreen,
-                canNavigateBack = navController.previousBackStackEntry != null,
-                navigateUp = { navController.popBackStack() },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
+            NavHost(
+                navController = navController as NavHostController,
+                startDestination = HearNearScreen.Start.name,
+                modifier = Modifier.fillMaxSize()
             ) {
-                NavHost(
-                    navController = navController as NavHostController,
-                    startDestination = HearNearScreen.Start.name,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    composable(HearNearScreen.Start.name) {
-                        HomeScreen()
-                    }
-                    composable(HearNearScreen.Map.name) {
-                        MapScreen()
-                    }
-                    composable(HearNearScreen.Profile.name) {
-                        UserScreen()
-                    }
-
+                composable(HearNearScreen.Start.name) {
+                    HomeScreen()
+                }
+                composable(HearNearScreen.Map.name) {
+                    MapScreen()
+                }
+                composable(HearNearScreen.Profile.name) {
+                    UserScreen()
+                }
+                composable(HearNearScreen.Login.name) {
+                    LoginScreen(
+                        authViewModel = authViewModel,
+                        onNavigateToRegister = {
+                            navController.navigate(HearNearScreen.Register.name)
+                        }
+                    )
+                }
+                composable(HearNearScreen.Register.name) {
+                    RegisterScreen(
+                        authViewModel = authViewModel,
+                        onNavigateToLogin = {
+                            navController.popBackStack()
+                        }
+                    )
                 }
             }
-
-            HearNearBottomBar(
-                navController = navController,
-                currentScreen = currentScreen
-            )
         }
+
+        HearNearBottomBar(
+            navController = navController,
+            currentScreen = currentScreen
+        )
     }
+}

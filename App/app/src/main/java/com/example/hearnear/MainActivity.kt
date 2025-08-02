@@ -16,15 +16,19 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hearnear.ui.HearNearApp
 import com.example.hearnear.ui.HearNearScreen
 import com.example.hearnear.ui.theme.HearNearTheme
+import com.example.hearnear.viewmodel.AuthViewModel
 import com.google.android.gms.location.LocationServices
 import org.maplibre.android.MapLibre
 import org.maplibre.android.WellKnownTileServer
@@ -50,7 +54,16 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                HearNearApp()
+                val authViewModel: AuthViewModel = viewModel {
+                    AuthViewModel(applicationContext)
+                }
+                val authState by authViewModel.authState.collectAsState()
+
+                if (authState.isLoggedIn) {
+                    HearNearApp(authViewModel = authViewModel)
+                } else {
+                    AuthApp(authViewModel = authViewModel)
+                }
             }
         }
     }
