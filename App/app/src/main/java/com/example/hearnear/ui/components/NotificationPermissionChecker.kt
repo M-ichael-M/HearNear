@@ -25,26 +25,73 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 
 @Composable
 fun NotificationPermissionChecker() {
     val context = LocalContext.current
     var showDialog by remember { mutableStateOf(false) }
-    var isEnabled by remember { mutableStateOf(false) }
+    var isNotificationEnabled by remember { mutableStateOf(false) }
+    var missingPermissions by remember { mutableStateOf(listOf<String>()) }
 
-    LaunchedEffect(Unit) {
+    // Lista uprawnień do sprawdzenia
+    val permissionsToCheck = listOf(
+        Manifest.permission.FOREGROUND_SERVICE,
+        Manifest.permission.INTERNET,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+    )
+
+    // Launcher do obsługi wyniku z ustawień
+    val notificationSettingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        // Po powrocie z ustawień sprawdzamy uprawnienia
         val enabledListeners = Settings.Secure.getString(
             context.contentResolver,
             "enabled_notification_listeners"
         )
-        isEnabled = enabledListeners?.contains(context.packageName) == true
+        isNotificationEnabled = enabledListeners?.contains(context.packageName) == true
+    }
 
-        if (!isEnabled) {
-            showDialog = true
+    // Launcher do żądania uprawnień systemowych
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // Po nadaniu uprawnień aktualizujemy listę brakujących
+        missingPermissions = permissionsToCheck.filter { permission ->
+            ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
         }
     }
 
-    if (!isEnabled) {
+    // Funkcja sprawdzająca wszystkie uprawnienia
+    fun checkAllPermissions() {
+        val enabledListeners = Settings.Secure.getString(
+            context.contentResolver,
+            "enabled_notification_listeners"
+        )
+        isNotificationEnabled = enabledListeners?.contains(context.packageName) == true
+
+        missingPermissions = permissionsToCheck.filter { permission ->
+            ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
+        }
+
+        showDialog = !isNotificationEnabled || missingPermissions.isNotEmpty()
+    }
+
+    // Sprawdzanie uprawnień przy każdym uruchomieniu i po zmianach
+    LaunchedEffect(Unit) {
+        while (true) {
+            checkAllPermissions()
+            kotlinx.coroutines.delay(1000) // Odświeżanie co 1 sekundę
+        }
+    }
+
+    if (!isNotificationEnabled || missingPermissions.isNotEmpty()) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -65,7 +112,22 @@ fun NotificationPermissionChecker() {
                 )
 
                 Text(
-                    text = "Aby wyświetlać aktualnie odtwarzaną muzykę, aplikacja potrzebuje dostępu do powiadomień.",
+                    text = buildString {
+                        append("Aplikacja potrzebuje następujących uprawnień:\n")
+                        if (!isNotificationEnabled) {
+                            append("- Dostęp do powiadomień\n")
+                        }
+                        if (missingPermissions.contains(Manifest.permission.FOREGROUND_SERVICE)) {
+                            append("- Usługa pierwszoplanowa\n")
+                        }
+                        if (missingPermissions.contains(Manifest.permission.INTERNET)) {
+                            append("- Dostęp do internetu\n")
+                        }
+                        if (missingPermissions.contains(Manifest.permission.ACCESS_FINE_LOCATION) ||
+                            missingPermissions.contains(Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                            append("- Lokalizacja\n")
+                        }
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
@@ -74,8 +136,13 @@ fun NotificationPermissionChecker() {
 
                 Button(
                     onClick = {
-                        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                        context.startActivity(intent)
+                        if (!isNotificationEnabled) {
+                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                            notificationSettingsLauncher.launch(intent)
+                        }
+                        if (missingPermissions.isNotEmpty()) {
+                            permissionLauncher.launch(permissionsToCheck.toTypedArray())
+                        }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -89,17 +156,39 @@ fun NotificationPermissionChecker() {
         AlertDialog(
             onDismissRequest = { showDialog = false },
             title = {
-                Text("Uprawnienia do powiadomień")
+                Text("Wymagane uprawnienia")
             },
             text = {
-                Text("HearNear potrzebuje dostępu do powiadomień, aby wyświetlać informacje o aktualnie odtwarzanej muzyce ze Spotify i YouTube Music.")
+                Text(
+                    buildString {
+                        append("HearNear potrzebuje następujących uprawnień:\n")
+                        if (!isNotificationEnabled) {
+                            append("- Dostęp do powiadomień do wyświetlania muzyki\n")
+                        }
+                        if (missingPermissions.contains(Manifest.permission.FOREGROUND_SERVICE)) {
+                            append("- Usługa pierwszoplanowa do działania w tle\n")
+                        }
+                        if (missingPermissions.contains(Manifest.permission.INTERNET)) {
+                            append("- Internet do łączności sieciowej\n")
+                        }
+                        if (missingPermissions.contains(Manifest.permission.ACCESS_FINE_LOCATION) ||
+                            missingPermissions.contains(Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                            append("- Lokalizacja do funkcji opartych na położeniu\n")
+                        }
+                    }
+                )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showDialog = false
-                        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                        context.startActivity(intent)
+                        if (!isNotificationEnabled) {
+                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                            notificationSettingsLauncher.launch(intent)
+                        }
+                        if (missingPermissions.isNotEmpty()) {
+                            permissionLauncher.launch(permissionsToCheck.toTypedArray())
+                        }
                     }
                 ) {
                     Text("Przejdź do ustawień")
