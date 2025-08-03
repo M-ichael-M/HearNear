@@ -60,6 +60,36 @@ data class ActivityData(
     val last_updated: String
 )
 
+data class NearbyListener(
+    val email: String,
+    val nick: String,
+    val distance_km: Double,
+    val latitude: Double,
+    val longitude: Double,
+    val track_name: String,
+    val artist_name: String,
+    val album_name: String?,
+    val last_updated: String,
+    val minutes_ago: Int
+)
+
+data class NearbyListenersResponse(
+    val listeners: List<NearbyListener>,
+    val total_count: Int,
+    val search_params: SearchParams
+)
+
+data class SearchParams(
+    val max_distance_km: Double,
+    val max_age_minutes: Int,
+    val your_location: YourLocation
+)
+
+data class YourLocation(
+    val latitude: Double,
+    val longitude: Double
+)
+
 interface ApiService {
     @POST("api/login")
     suspend fun login(@Body request: LoginRequest): Response<AuthResponse>
@@ -78,4 +108,11 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body request: UpdateActivityRequest
     ): Response<ActivityResponse>
+
+    @GET("api/nearby-listeners")
+    suspend fun getNearbyListeners(
+        @Header("Authorization") token: String,
+        @Query("max_distance") maxDistance: Double = 50.0,
+        @Query("max_age_minutes") maxAgeMinutes: Int = 60
+    ): Response<NearbyListenersResponse>
 }

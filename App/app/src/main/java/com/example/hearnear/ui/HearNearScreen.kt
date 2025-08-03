@@ -41,6 +41,7 @@ import com.example.hearnear.ui.screens.MapScreen
 import com.example.hearnear.ui.screens.RegisterScreen
 import com.example.hearnear.ui.screens.UserScreen
 import com.example.hearnear.viewmodel.AuthViewModel
+import com.example.hearnear.viewmodel.NearbyListenersViewModel
 
 enum class HearNearScreen(@StringRes val title: Int, @DrawableRes val imageRes: Int) {
     Start(title = R.string.start, imageRes = R.drawable.outline_home_24),
@@ -167,6 +168,7 @@ fun HearNearBottomBar(
 @Composable
 fun HearNearApp(
     authViewModel: AuthViewModel,
+    nearbyListenersViewModel: NearbyListenersViewModel,
     navController: NavController = rememberNavController(),
 ) {
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -195,7 +197,7 @@ fun HearNearApp(
                 modifier = Modifier.fillMaxSize()
             ) {
                 composable(HearNearScreen.Start.name) {
-                    HomeScreen()
+                    HomeScreen(nearbyListenersViewModel = nearbyListenersViewModel)
                 }
                 composable(HearNearScreen.Map.name) {
                     MapScreen()

@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hearnear.ui.HearNearApp
 import com.example.hearnear.viewmodel.AuthViewModel
+import com.example.hearnear.viewmodel.NearbyListenersViewModel
 import org.maplibre.android.MapLibre
 import org.maplibre.android.WellKnownTileServer
 
@@ -36,6 +37,9 @@ class MainActivity : ComponentActivity() {
                 val authViewModel: AuthViewModel = viewModel {
                     AuthViewModel(applicationContext)
                 }
+                val nearbyListenersViewModel: NearbyListenersViewModel = viewModel {
+                    NearbyListenersViewModel(applicationContext)
+                }
                 val authState by authViewModel.authState.collectAsState()
 
                 // Sprawdź i uruchom NotificationListener gdy użytkownik jest zalogowany
@@ -46,7 +50,10 @@ class MainActivity : ComponentActivity() {
                 }
 
                 if (authState.isLoggedIn) {
-                    HearNearApp(authViewModel = authViewModel)
+                    HearNearApp(
+                        authViewModel = authViewModel,
+                        nearbyListenersViewModel = nearbyListenersViewModel
+                    )
                 } else {
                     AuthApp(authViewModel = authViewModel)
                 }
