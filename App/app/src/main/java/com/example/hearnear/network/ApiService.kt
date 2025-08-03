@@ -38,6 +38,28 @@ data class TokenVerifyResponse(
     val user: User
 )
 
+data class UpdateActivityRequest(
+    val latitude: Double,
+    val longitude: Double,
+    val track_name: String,
+    val artist_name: String,
+    val album_name: String? = null
+)
+
+data class ActivityResponse(
+    val message: String,
+    val activity: ActivityData
+)
+
+data class ActivityData(
+    val latitude: Double,
+    val longitude: Double,
+    val track_name: String,
+    val artist_name: String,
+    val album_name: String?,
+    val last_updated: String
+)
+
 interface ApiService {
     @POST("api/login")
     suspend fun login(@Body request: LoginRequest): Response<AuthResponse>
@@ -50,4 +72,10 @@ interface ApiService {
 
     @POST("api/logout")
     suspend fun logout(@Header("Authorization") token: String): Response<ApiError>
+
+    @POST("api/update-activity")
+    suspend fun updateActivity(
+        @Header("Authorization") token: String,
+        @Body request: UpdateActivityRequest
+    ): Response<ActivityResponse>
 }
