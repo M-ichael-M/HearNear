@@ -1,30 +1,16 @@
 package com.example.hearnear.ui.screens
 
+import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -33,13 +19,21 @@ import com.example.hearnear.ui.components.NotificationPermissionChecker
 import com.example.hearnear.viewmodel.NearbyListenersViewModel
 import com.example.hearnear.R
 import com.example.hearnear.network.NearbyListener
+import com.example.hearnear.service.MusicTrackingService
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun HomeScreen(nearbyListenersViewModel: NearbyListenersViewModel) {
     val state by nearbyListenersViewModel.state.collectAsState()
+    val context = LocalContext.current
+    val sharedPrefs = remember {
+        context.getSharedPreferences("music_sharing_prefs", Context.MODE_PRIVATE)
+    }
 
-    // Uruchom automatyczne odświeżanie przy pierwszym ładowaniu
+    var isSharingEnabled by remember {
+        mutableStateOf(sharedPrefs.getBoolean("music_sharing_enabled", false))
+    }
+
     LaunchedEffect(Unit) {
         nearbyListenersViewModel.loadNearbyListeners()
         nearbyListenersViewModel.startAutoRefresh()
@@ -52,14 +46,63 @@ fun HomeScreen(nearbyListenersViewModel: NearbyListenersViewModel) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Nagłówek
         Text(
             text = "Hear Near",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        // Przycisk odświeżania
+        // Przełącznik udostępniania muzyki
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isSharingEnabled)
+                    MaterialTheme.colorScheme.primaryContainer
+                else
+                    MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Udostępniaj muzykę",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (isSharingEnabled) "Twoja muzyka jest udostępniana"
+                        else "Włącz aby inni mogli Cię znaleźć",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Switch(
+                    checked = isSharingEnabled,
+                    onCheckedChange = { enabled ->
+                        isSharingEnabled = enabled
+                        sharedPrefs.edit()
+                            .putBoolean("music_sharing_enabled", enabled)
+                            .apply()
+
+                        if (enabled) {
+                            MusicTrackingService.start(context)
+                        } else {
+                            MusicTrackingService.stop(context)
+                        }
+                    }
+                )
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -75,7 +118,7 @@ fun HomeScreen(nearbyListenersViewModel: NearbyListenersViewModel) {
                 enabled = !state.isLoading
             ) {
                 Icon(
-                    painter = painterResource(id = R.drawable.rounded_refresh_24), // Dodaj tę ikonę
+                    painter = painterResource(id = R.drawable.rounded_refresh_24),
                     contentDescription = "Odśwież"
                 )
             }
@@ -83,7 +126,6 @@ fun HomeScreen(nearbyListenersViewModel: NearbyListenersViewModel) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Stan ładowania
         if (state.isLoading) {
             Box(
                 modifier = Modifier.fillMaxWidth(),
@@ -93,7 +135,6 @@ fun HomeScreen(nearbyListenersViewModel: NearbyListenersViewModel) {
             }
         }
 
-        // Błąd
         state.error?.let { error ->
             Card(
                 modifier = Modifier
@@ -121,7 +162,6 @@ fun HomeScreen(nearbyListenersViewModel: NearbyListenersViewModel) {
             }
         }
 
-        // Lista użytkowników
         if (state.listeners.isEmpty() && !state.isLoading && state.error == null) {
             EmptyState()
         } else {
@@ -145,7 +185,6 @@ fun NearbyListenerCard(listener: NearbyListener) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            // Nick i dystans
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -165,7 +204,6 @@ fun NearbyListenerCard(listener: NearbyListener) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Informacje o utworze
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -199,7 +237,6 @@ fun NearbyListenerCard(listener: NearbyListener) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Czas ostatniej aktualizacji
             Text(
                 text = if (listener.minutes_ago == 0) "Teraz" else "${listener.minutes_ago} min temu",
                 style = MaterialTheme.typography.bodySmall,
