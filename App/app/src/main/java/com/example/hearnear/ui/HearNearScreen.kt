@@ -200,7 +200,7 @@ fun HearNearApp(
                     HomeScreen(nearbyListenersViewModel = nearbyListenersViewModel)
                 }
                 composable(HearNearScreen.Map.name) {
-                    MapScreen()
+                    MapScreen(nearbyListenersViewModel = nearbyListenersViewModel)
                 }
                 composable(HearNearScreen.Profile.name) {
                     UserScreen(authViewModel = authViewModel)
