@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +31,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.hearnear.ui.HearNearScreen
 import com.example.hearnear.viewmodel.AuthViewModel
+import com.example.hearnear.R
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -146,7 +149,8 @@ fun RegisterScreen(
                     onClick = { passwordVisible = !passwordVisible }
                 ) {
                     Icon(
-                        imageVector = if (passwordVisible) Icons.Default.ThumbUp else Icons.Default.Close,
+                        painter = if (passwordVisible) painterResource(R.drawable.outline_visibility_24)
+                        else painterResource(R.drawable.outline_visibility_off_24),
                         contentDescription = if (passwordVisible) "Ukryj hasło" else "Pokaż hasło"
                     )
                 }
@@ -182,7 +186,7 @@ fun RegisterScreen(
                     onClick = { confirmPasswordVisible = !confirmPasswordVisible }
                 ) {
                     Icon(
-                        imageVector = if (confirmPasswordVisible) Icons.Default.ThumbUp else Icons.Default.Close,
+                        painter = if (confirmPasswordVisible) painterResource(R.drawable.outline_visibility_24) else painterResource(R.drawable.outline_visibility_off_24),
                         contentDescription = if (confirmPasswordVisible) "Ukryj hasło" else "Pokaż hasło"
                     )
                 }

@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -36,6 +37,8 @@ import coil.compose.AsyncImage
 import com.example.hearnear.ui.HearNearScreen
 import com.example.hearnear.viewmodel.AuthViewModel
 import kotlinx.coroutines.launch
+import com.example.hearnear.R
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -206,9 +209,9 @@ fun UserScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Share,
+                        painter = painterResource(id = R.drawable.instagram2),
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = MaterialTheme.colorScheme.primary, // jeśli chcesz kolorować ikonę
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(16.dp))
