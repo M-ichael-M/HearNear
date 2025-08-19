@@ -1,6 +1,7 @@
 package com.example.hearnear.network
 
 
+import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -20,7 +21,10 @@ data class RegisterRequest(
 data class User(
     val id: Int,
     val nick: String,
-    val email: String
+    val email: String,
+    val instagram_username: String? = null,
+    val instagram_url: String? = null,
+    val avatar_url: String? = null
 )
 
 data class AuthResponse(
@@ -36,6 +40,21 @@ data class ApiError(
 data class TokenVerifyResponse(
     val valid: Boolean,
     val user: User
+)
+
+data class InstagramRequest(
+    val instagram_username: String?
+)
+
+data class InstagramResponse(
+    val message: String,
+    val instagram_username: String?,
+    val instagram_url: String?
+)
+
+data class AvatarResponse(
+    val message: String,
+    val avatar_url: String?
 )
 
 data class UpdateActivityRequest(
@@ -115,4 +134,22 @@ interface ApiService {
         @Query("max_distance") maxDistance: Double = 50.0,
         @Query("max_age_minutes") maxAgeMinutes: Int = 60
     ): Response<NearbyListenersResponse>
+
+    @POST("api/instagram")
+    suspend fun updateInstagram(
+        @Header("Authorization") token: String,
+        @Body request: InstagramRequest
+    ): Response<InstagramResponse>
+
+    @Multipart
+    @POST("api/avatar")
+    suspend fun uploadAvatar(
+        @Header("Authorization") token: String,
+        @Part avatar: MultipartBody.Part
+    ): Response<AvatarResponse>
+
+    @DELETE("api/avatar")
+    suspend fun deleteAvatar(
+        @Header("Authorization") token: String
+    ): Response<ApiError>
 }

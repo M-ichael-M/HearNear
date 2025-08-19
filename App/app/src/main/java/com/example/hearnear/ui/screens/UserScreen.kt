@@ -1,6 +1,11 @@
 package com.example.hearnear.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -13,19 +18,24 @@ import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.hearnear.ui.HearNearScreen
 import com.example.hearnear.viewmodel.AuthViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +44,43 @@ fun UserScreen(
     navController: NavController
 ) {
     val authState by authViewModel?.authState?.collectAsState() ?: remember { mutableStateOf(null) }
+    val context = LocalContext.current
+    val showInstagramDialog = remember { mutableStateOf(false) }
+    var instagramInput by remember { mutableStateOf("") }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            authViewModel?.uploadAvatar(uri)
+        }
+    }
+    val coroutineScope = rememberCoroutineScope()
+
+    if (showInstagramDialog.value) {
+        AlertDialog(
+            onDismissRequest = { showInstagramDialog.value = false },
+            title = { Text("Dodaj/Edytuj Instagram") },
+            text = {
+                TextField(
+                    value = instagramInput,
+                    onValueChange = { instagramInput = it },
+                    label = { Text("Nazwa użytkownika IG") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    authViewModel?.updateInstagram(if (instagramInput.isBlank()) null else instagramInput)
+                    showInstagramDialog.value = false
+                }) {
+                    Text("Zapisz")
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showInstagramDialog.value = false }) {
+                    Text("Anuluj")
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -42,7 +89,6 @@ fun UserScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Sekcja profilu użytkownika
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -58,25 +104,48 @@ fun UserScreen(
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Avatar placeholder
                 Box(
                     modifier = Modifier
                         .size(120.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable {
+                            if (authState?.user?.avatar_url != null) {
+                                coroutineScope.launch {
+                                    authViewModel?.deleteAvatar()
+                                }
+                            } else {
+                                launcher.launch("image/*")
+                            }
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.AccountCircle,
-                        contentDescription = "Avatar użytkownika",
-                        modifier = Modifier.size(80.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
+                    val avatarUrl = authState?.user?.avatar_url
+                    if (avatarUrl != null) {
+                        AsyncImage(
+                            model = "http://192.168.1.30:5000$avatarUrl",  // Dopasuj BASE_URL
+                            contentDescription = "Awatar użytkownika",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = "Awatar użytkownika",
+                            modifier = Modifier.size(80.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (authState?.user?.avatar_url != null) "Kliknij by usunąć awatar" else "Kliknij by dodać awatar",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Nazwa użytkownika
                 Text(
                     text = authState?.user?.nick ?: "Użytkownik",
                     fontSize = 24.sp,
@@ -86,7 +155,6 @@ fun UserScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Email użytkownika
                 Text(
                     text = authState?.user?.email ?: "user@example.com",
                     fontSize = 16.sp,
@@ -95,7 +163,6 @@ fun UserScreen(
             }
         }
 
-        // Sekcja informacji o koncie
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -126,10 +193,56 @@ fun UserScreen(
                     label = "Email",
                     value = authState?.user?.email ?: "Brak danych"
                 )
+
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            instagramInput = authState?.user?.instagram_username ?: ""
+                            showInstagramDialog.value = true
+                        },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Instagram",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val igUrl = authState?.user?.instagram_url
+                        if (igUrl != null) {
+                            Text(
+                                text = "@${authState?.user?.instagram_username}",
+                                fontSize = 16.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.clickable {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(igUrl))
+                                    context.startActivity(intent)
+                                }
+                            )
+                        } else {
+                            Text(
+                                text = "Dodaj profil Instagram",
+                                fontSize = 16.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
             }
         }
 
-        // Sekcja opcji
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -147,7 +260,6 @@ fun UserScreen(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
-
                 UserActionItem(
                     icon = Icons.Default.Person,
                     label = "Privacy & Policy",
@@ -158,7 +270,6 @@ fun UserScreen(
 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-
                 UserActionItem(
                     icon = Icons.Default.Info,
                     label = "Statute",
@@ -166,7 +277,6 @@ fun UserScreen(
                         navController.navigate(HearNearScreen.Statute.name)
                     }
                 )
-
 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -181,7 +291,6 @@ fun UserScreen(
             }
         }
 
-        // Stopka z informacjami o aplikacji
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
