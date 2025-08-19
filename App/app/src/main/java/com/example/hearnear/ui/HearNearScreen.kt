@@ -38,7 +38,9 @@ import com.example.hearnear.R
 import com.example.hearnear.ui.screens.HomeScreen
 import com.example.hearnear.ui.screens.LoginScreen
 import com.example.hearnear.ui.screens.MapScreen
+import com.example.hearnear.ui.screens.PrivacyPolicy
 import com.example.hearnear.ui.screens.RegisterScreen
+import com.example.hearnear.ui.screens.Statute
 import com.example.hearnear.ui.screens.UserScreen
 import com.example.hearnear.viewmodel.AuthViewModel
 import com.example.hearnear.viewmodel.NearbyListenersViewModel
@@ -48,7 +50,9 @@ enum class HearNearScreen(@StringRes val title: Int, @DrawableRes val imageRes: 
     Map(title = R.string.map, imageRes = R.drawable.outline_map_24),
     Profile(title = R.string.profile, imageRes = R.drawable.rounded_person_24),
     Login(title = R.string.login, imageRes = R.drawable.outline_login_24),
-    Register(title = R.string.register, imageRes = R.drawable.outline_app_registration_24)
+    Register(title = R.string.register, imageRes = R.drawable.outline_app_registration_24),
+    PrivacyPolicy(title = R.string.privacy_policy, imageRes = R.drawable.rounded_person_24),
+    Statute(title = R.string.statute, imageRes = R.drawable.outline_error_24)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -203,8 +207,12 @@ fun HearNearApp(
                     MapScreen(nearbyListenersViewModel = nearbyListenersViewModel)
                 }
                 composable(HearNearScreen.Profile.name) {
-                    UserScreen(authViewModel = authViewModel)
+                    UserScreen(
+                        authViewModel = authViewModel,
+                        navController = navController
+                    )
                 }
+
                 composable(HearNearScreen.Login.name) {
                     LoginScreen(
                         authViewModel = authViewModel,
@@ -218,9 +226,17 @@ fun HearNearApp(
                         authViewModel = authViewModel,
                         onNavigateToLogin = {
                             navController.popBackStack()
-                        }
+                        },
+                        navController = navController
                     )
                 }
+                composable(HearNearScreen.PrivacyPolicy.name){
+                    PrivacyPolicy()
+                }
+                composable(HearNearScreen.Statute.name){
+                    Statute()
+                }
+
             }
         }
 

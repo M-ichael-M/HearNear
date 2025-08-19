@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -22,12 +23,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import com.example.hearnear.ui.HearNearScreen
 import com.example.hearnear.viewmodel.AuthViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserScreen(
-    authViewModel: AuthViewModel? = null
+    authViewModel: AuthViewModel? = null,
+    navController: NavController
 ) {
     val authState by authViewModel?.authState?.collectAsState() ?: remember { mutableStateOf(null) }
 
@@ -143,11 +147,26 @@ fun UserScreen(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
 
+
                 UserActionItem(
-                    icon = Icons.Default.Settings,
-                    label = "Ustawienia",
-                    onClick = { /* TODO: Implementacja ustawień */ }
+                    icon = Icons.Default.Person,
+                    label = "Privacy & Policy",
+                    onClick = {
+                        navController.navigate(HearNearScreen.PrivacyPolicy.name)
+                    }
                 )
+
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+
+                UserActionItem(
+                    icon = Icons.Default.Info,
+                    label = "Statute",
+                    onClick = {
+                        navController.navigate(HearNearScreen.Statute.name)
+                    }
+                )
+
 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
 

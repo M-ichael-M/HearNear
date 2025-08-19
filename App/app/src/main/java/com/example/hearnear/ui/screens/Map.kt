@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
-import android.util.Log
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
@@ -15,18 +14,18 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.example.hearnear.network.NearbyListener
 import com.example.hearnear.viewmodel.NearbyListenersViewModel
 import com.google.android.gms.location.LocationServices
+import com.google.gson.JsonPrimitive
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapView
@@ -34,7 +33,6 @@ import org.maplibre.android.maps.Style
 import org.maplibre.android.plugins.annotation.Symbol
 import org.maplibre.android.plugins.annotation.SymbolManager
 import org.maplibre.android.plugins.annotation.SymbolOptions
-import com.google.gson.JsonPrimitive
 
 @Composable
 fun MapScreen(nearbyListenersViewModel: NearbyListenersViewModel) {
@@ -66,22 +64,13 @@ fun MapLibreScreen(listeners: List<NearbyListener>) {
                     symbolManagerState.value = symbolManager
 
                     // Generate and add images: user dot and colored pins
-                    val dotBitmap = createCircleBitmap(20, 0xFF2196F3.toInt(), 0xFFFFFFFF.toInt(), 4)
+                    val dotBitmap = createCircleBitmap(20, 0xFF90CAF9.toInt(), 0xFF2196F3.toInt(), 2)
                     style.addImage("user-dot", dotBitmap)
 
-                    // Prepare a palette of colors for listener pins
-                    val colors = listOf(
-                        0xFFE53935.toInt(), // red
-                        0xFF43A047.toInt(), // green
-                        0xFFFDD835.toInt(), // yellow
-                        0xFF1E88E5.toInt(), // blue
-                        0xFF8E24AA.toInt()  // purple
-                    )
-                    listeners.forEachIndexed { index, _ ->
-                        val color = colors[index % colors.size]
-                        val pinBitmap = createPinBitmap(40, color, 0xFF000000.toInt(), 4)
-                        style.addImage("pin-$index", pinBitmap)
-                    }
+                    // Use a single purple circle icon for all other listeners
+                    val listenerDotBitmap = createCircleBitmap(20, 0xFF8E24AA.toInt(), 0xFFFFFFFF.toInt(), 0)
+                    style.addImage("listener-dot", listenerDotBitmap)
+
 
                     // Show user location
                     if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -107,7 +96,7 @@ fun MapLibreScreen(listeners: List<NearbyListener>) {
                         symbolManager.create(
                             SymbolOptions()
                                 .withLatLng(LatLng(listener.latitude, listener.longitude))
-                                .withIconImage("pin-$index")
+                                .withIconImage("listener-dot")
                                 .withIconSize(1.5f)
                                 .withData(JsonPrimitive(index))
                         )

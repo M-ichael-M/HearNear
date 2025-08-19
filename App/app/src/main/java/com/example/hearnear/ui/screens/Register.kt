@@ -2,6 +2,7 @@ package com.example.hearnear.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -14,13 +15,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavController
+import com.example.hearnear.ui.HearNearScreen
 import com.example.hearnear.viewmodel.AuthViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,6 +36,7 @@ import com.example.hearnear.viewmodel.AuthViewModel
 fun RegisterScreen(
     authViewModel: AuthViewModel,
     onNavigateToLogin: () -> Unit,
+    navController: NavController,
     modifier: Modifier = Modifier
 ) {
     val authState by authViewModel.authState.collectAsState()
@@ -204,10 +213,37 @@ fun RegisterScreen(
                 onCheckedChange = { termsAccepted = it }
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Akceptuję regulamin aplikacji",
+
+            val annotatedText = buildAnnotatedString {
+                append("Akceptuję ")
+
+                pushStringAnnotation(tag = "TERMS", annotation = "regulamin")
+                withStyle(
+                    style = SpanStyle(
+                        // np. niebieski
+                        Color(0xFF2196F3), textDecoration = TextDecoration.Underline
+                    )
+                ) {
+                    append("regulamin")
+                }
+                pop()
+
+                append(" aplikacji")
+            }
+
+            ClickableText(
+                text = annotatedText,
                 modifier = Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.onSurface
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                onClick = { offset ->
+                    annotatedText.getStringAnnotations(tag = "TERMS", start = offset, end = offset)
+                        .firstOrNull()?.let {
+                            navController.navigate(HearNearScreen.Statute.name)
+
+                        }
+                }
             )
         }
 

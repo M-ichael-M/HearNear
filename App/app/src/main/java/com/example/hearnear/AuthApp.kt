@@ -22,11 +22,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.hearnear.ui.screens.LoginScreen
 import com.example.hearnear.ui.screens.RegisterScreen
+import com.example.hearnear.ui.screens.Statute
 import com.example.hearnear.viewmodel.AuthViewModel
 
 enum class AuthScreen(val route: String) {
     Login("login"),
-    Register("register")
+    Register("register"),
+    Statute("Statute")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,6 +45,7 @@ fun AuthAppBar(
                 text = when (currentScreen) {
                     AuthScreen.Login -> "Logowanie"
                     AuthScreen.Register -> "Rejestracja"
+                    AuthScreen.Statute -> "Regulamin"
                 },
                 color = MaterialTheme.colorScheme.onPrimary
             )
@@ -101,8 +104,13 @@ fun AuthApp(
                     authViewModel = authViewModel,
                     onNavigateToLogin = {
                         navController.popBackStack()
-                    }
+                    },
+                    navController = navController
                 )
+            }
+
+            composable(AuthScreen.Statute.route) {
+                Statute()
             }
         }
     }
