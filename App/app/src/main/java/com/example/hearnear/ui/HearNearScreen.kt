@@ -38,6 +38,7 @@ import com.example.hearnear.R
 import com.example.hearnear.ui.screens.HomeScreen
 import com.example.hearnear.ui.screens.LoginScreen
 import com.example.hearnear.ui.screens.MapScreen
+import com.example.hearnear.ui.screens.OtherUserProfile
 import com.example.hearnear.ui.screens.PrivacyPolicy
 import com.example.hearnear.ui.screens.RegisterScreen
 import com.example.hearnear.ui.screens.Statute
@@ -52,7 +53,8 @@ enum class HearNearScreen(@StringRes val title: Int, @DrawableRes val imageRes: 
     Login(title = R.string.login, imageRes = R.drawable.outline_login_24),
     Register(title = R.string.register, imageRes = R.drawable.outline_app_registration_24),
     PrivacyPolicy(title = R.string.privacy_policy, imageRes = R.drawable.rounded_person_24),
-    Statute(title = R.string.statute, imageRes = R.drawable.outline_error_24)
+    Statute(title = R.string.statute, imageRes = R.drawable.outline_error_24),
+    OtherProfile(title = R.string.other_profile, imageRes = R.drawable.rounded_person_24)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -204,7 +206,10 @@ fun HearNearApp(
                     HomeScreen(nearbyListenersViewModel = nearbyListenersViewModel)
                 }
                 composable(HearNearScreen.Map.name) {
-                    MapScreen(nearbyListenersViewModel = nearbyListenersViewModel)
+                    MapScreen(
+                        nearbyListenersViewModel = nearbyListenersViewModel,
+                        navController = navController
+                    )
                 }
                 composable(HearNearScreen.Profile.name) {
                     UserScreen(
@@ -235,6 +240,13 @@ fun HearNearApp(
                 }
                 composable(HearNearScreen.Statute.name){
                     Statute()
+                }
+
+                composable(HearNearScreen.OtherProfile.name) {
+                    OtherUserProfile(
+                        nearbyListenersViewModel = nearbyListenersViewModel,
+                        navController = navController
+                    )
                 }
 
             }

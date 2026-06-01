@@ -22,7 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
+import androidx.navigation.NavController
 import com.example.hearnear.network.NearbyListener
+import com.example.hearnear.ui.HearNearScreen
 import com.example.hearnear.viewmodel.NearbyListenersViewModel
 import com.google.android.gms.location.LocationServices
 import com.google.gson.JsonPrimitive
@@ -35,13 +37,24 @@ import org.maplibre.android.plugins.annotation.SymbolManager
 import org.maplibre.android.plugins.annotation.SymbolOptions
 
 @Composable
-fun MapScreen(nearbyListenersViewModel: NearbyListenersViewModel) {
+fun MapScreen(
+    nearbyListenersViewModel: NearbyListenersViewModel,
+    navController: NavController
+) {
     val state by nearbyListenersViewModel.state.collectAsState()
-    MapLibreScreen(listeners = state.listeners)
+    MapLibreScreen(
+        listeners = state.listeners,
+        nearbyListenersViewModel = nearbyListenersViewModel,
+        navController = navController
+    )
 }
 
 @Composable
-fun MapLibreScreen(listeners: List<NearbyListener>) {
+fun MapLibreScreen(
+    listeners: List<NearbyListener>,
+    nearbyListenersViewModel: NearbyListenersViewModel,
+    navController: NavController
+) {
     val context = LocalContext.current
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     val mapView = remember {
@@ -153,7 +166,17 @@ fun MapLibreScreen(listeners: List<NearbyListener>) {
             },
             confirmButton = {
                 TextButton(onClick = { selectedListener.value = null }) {
-                    Text("Zamknij") }
+                    Text("Zamknij")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    nearbyListenersViewModel._selectedListener.value = listener  // Ustaw selected
+                    selectedListener.value = null  // Zamknij dialog
+                    navController.navigate(HearNearScreen.OtherProfile.name)
+                }) {
+                    Text("Zobacz profil")
+                }
             }
         )
     }

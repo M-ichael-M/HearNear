@@ -89,7 +89,10 @@ data class NearbyListener(
     val artist_name: String,
     val album_name: String?,
     val last_updated: String,
-    val minutes_ago: Int
+    val minutes_ago: Int,
+    val avatar_url: String? = null,
+    val instagram_username: String? = null,
+    val instagram_url: String? = null
 )
 
 data class NearbyListenersResponse(

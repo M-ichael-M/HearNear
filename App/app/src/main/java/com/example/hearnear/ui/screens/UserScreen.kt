@@ -325,7 +325,7 @@ fun UserScreen(
 }
 
 @Composable
-private fun UserInfoItem(
+fun UserInfoItem(
     icon: ImageVector,
     label: String,
     value: String

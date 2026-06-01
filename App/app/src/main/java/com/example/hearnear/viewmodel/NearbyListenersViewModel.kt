@@ -26,6 +26,9 @@ class NearbyListenersViewModel(private val context: Context) : ViewModel() {
     private val _state = MutableStateFlow(NearbyListenersState())
     val state: StateFlow<NearbyListenersState> = _state.asStateFlow()
 
+    val _selectedListener = MutableStateFlow<NearbyListener?>(null)
+    val selectedListener: StateFlow<NearbyListener?> = _selectedListener.asStateFlow()
+
     private val sharedPrefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
     private val gson = Gson()
 
