@@ -20,6 +20,7 @@ import com.example.hearnear.viewmodel.NearbyListenersViewModel
 import com.example.hearnear.R
 import com.example.hearnear.network.NearbyListener
 import com.example.hearnear.service.MusicTrackingService
+import kotlinx.coroutines.delay
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -32,6 +33,20 @@ fun HomeScreen(nearbyListenersViewModel: NearbyListenersViewModel) {
 
     var isSharingEnabled by remember {
         mutableStateOf(sharedPrefs.getBoolean("music_sharing_enabled", false))
+    }
+
+    // Aktualnie odtwarzana muzyka – odświeżana co 2 sekundy
+    var currentTrack by remember { mutableStateOf<String?>(null) }
+    var currentArtist by remember { mutableStateOf<String?>(null) }
+    var currentAlbum by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTrack = sharedPrefs.getString("current_track", null)
+            currentArtist = sharedPrefs.getString("current_artist", null)
+            currentAlbum = sharedPrefs.getString("current_album", null)
+            delay(2000)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -49,6 +64,14 @@ fun HomeScreen(nearbyListenersViewModel: NearbyListenersViewModel) {
         Text(
             text = "Hear Near",
             style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        // --- Karta: Co teraz grasz ---
+        NowPlayingCard(
+            track = currentTrack,
+            artist = currentArtist,
+            album = currentAlbum,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
@@ -170,6 +193,91 @@ fun HomeScreen(nearbyListenersViewModel: NearbyListenersViewModel) {
             ) {
                 items(state.listeners) { listener ->
                     NearbyListenerCard(listener = listener)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun NowPlayingCard(
+    track: String?,
+    artist: String?,
+    album: String?,
+    modifier: Modifier = Modifier
+) {
+    val isPlaying = !track.isNullOrEmpty() && !artist.isNullOrEmpty()
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isPlaying)
+                MaterialTheme.colorScheme.secondaryContainer
+            else
+                MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.outline_music_note_24),
+                contentDescription = null,
+                tint = if (isPlaying)
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(40.dp)
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Teraz grasz",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isPlaying)
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                if (isPlaying) {
+                    Text(
+                        text = track!!,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Text(
+                        text = artist!!,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    if (!album.isNullOrEmpty()) {
+                        Text(
+                            text = album,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "W tej chwili nic nie słuchasz",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Uruchom Spotify lub YouTube Music",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
                 }
             }
         }

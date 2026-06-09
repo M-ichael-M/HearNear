@@ -10,19 +10,31 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -38,12 +50,14 @@ import com.example.hearnear.R
 import com.example.hearnear.ui.screens.HomeScreen
 import com.example.hearnear.ui.screens.LoginScreen
 import com.example.hearnear.ui.screens.MapScreen
+import com.example.hearnear.ui.screens.NotificationsScreen
 import com.example.hearnear.ui.screens.OtherUserProfile
 import com.example.hearnear.ui.screens.PrivacyPolicy
 import com.example.hearnear.ui.screens.RegisterScreen
 import com.example.hearnear.ui.screens.Statute
 import com.example.hearnear.ui.screens.UserScreen
 import com.example.hearnear.viewmodel.AuthViewModel
+import com.example.hearnear.viewmodel.FriendsViewModel
 import com.example.hearnear.viewmodel.NearbyListenersViewModel
 
 enum class HearNearScreen(@StringRes val title: Int, @DrawableRes val imageRes: Int) {
@@ -54,7 +68,8 @@ enum class HearNearScreen(@StringRes val title: Int, @DrawableRes val imageRes: 
     Register(title = R.string.register, imageRes = R.drawable.outline_app_registration_24),
     PrivacyPolicy(title = R.string.privacy_policy, imageRes = R.drawable.rounded_person_24),
     Statute(title = R.string.statute, imageRes = R.drawable.outline_error_24),
-    OtherProfile(title = R.string.other_profile, imageRes = R.drawable.rounded_person_24)
+    OtherProfile(title = R.string.other_profile, imageRes = R.drawable.rounded_person_24),
+    Notifications(title = R.string.notifications, imageRes = R.drawable.outline_home_24)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,6 +78,8 @@ fun HearNearAppBar(
     currentScreen: HearNearScreen,
     canNavigateBack: Boolean,
     navigateUp: () -> Unit,
+    pendingCount: Int,
+    onNotificationsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     TopAppBar(
@@ -71,6 +88,7 @@ fun HearNearAppBar(
                 text = when (currentScreen) {
                     HearNearScreen.Login -> "Logowanie"
                     HearNearScreen.Register -> "Rejestracja"
+                    HearNearScreen.Notifications -> "Powiadomienia"
                     else -> stringResource(currentScreen.title)
                 },
                 color = MaterialTheme.colorScheme.onPrimary
@@ -90,6 +108,29 @@ fun HearNearAppBar(
                     )
                 }
             }
+        },
+        actions = {
+            // Dzwonek z odznaczką – ukryj na ekranie powiadomień
+            if (currentScreen != HearNearScreen.Notifications &&
+                currentScreen != HearNearScreen.Login &&
+                currentScreen != HearNearScreen.Register
+            ) {
+                IconButton(onClick = onNotificationsClick) {
+                    BadgedBox(
+                        badge = {
+                            if (pendingCount > 0) {
+                                Badge { Text(text = pendingCount.toString()) }
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = "Powiadomienia",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+            }
         }
     )
 }
@@ -100,10 +141,7 @@ fun HearNearBottomBar(
     currentScreen: HearNearScreen,
     modifier: Modifier = Modifier
 ) {
-    // Ukryj bottom bar dla ekranów logowania i rejestracji
-    if (currentScreen == HearNearScreen.Login || currentScreen == HearNearScreen.Register) {
-        return
-    }
+    if (currentScreen == HearNearScreen.Login || currentScreen == HearNearScreen.Register) return
 
     Surface(
         shadowElevation = 4.dp,
@@ -111,8 +149,7 @@ fun HearNearBottomBar(
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier
-                .padding(start = 16.dp, end = 16.dp, bottom = 25.dp, top = 4.dp),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 25.dp, top = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -175,86 +212,92 @@ fun HearNearBottomBar(
 fun HearNearApp(
     authViewModel: AuthViewModel,
     nearbyListenersViewModel: NearbyListenersViewModel,
+    friendsViewModel: FriendsViewModel,
     navController: NavController = rememberNavController(),
 ) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentScreen = HearNearScreen.valueOf(
         backStackEntry?.destination?.route ?: HearNearScreen.Start.name
     )
+    val friendsState by friendsViewModel.state.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        HearNearAppBar(
-            currentScreen = currentScreen,
-            canNavigateBack = navController.previousBackStackEntry != null,
-            navigateUp = { navController.popBackStack() },
-            modifier = Modifier.fillMaxWidth()
-        )
+    // Odśwież powiadomienia przy starcie i gdy wrócisz na dowolny ekran
+    LaunchedEffect(Unit) {
+        friendsViewModel.loadPendingRequests()
+    }
 
-        Box(
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            HearNearAppBar(
+                currentScreen = currentScreen,
+                canNavigateBack = navController.previousBackStackEntry != null,
+                navigateUp = { navController.popBackStack() },
+                pendingCount = friendsState.pendingCount,
+                onNotificationsClick = {
+                    navController.navigate(HearNearScreen.Notifications.name)
+                }
+            )
+        },
+        bottomBar = {
+            HearNearBottomBar(
+                navController = navController,
+                currentScreen = currentScreen
+            )
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController as NavHostController,
+            startDestination = HearNearScreen.Start.name,
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+                .fillMaxSize()
+                .padding(innerPadding)
         ) {
-            NavHost(
-                navController = navController as NavHostController,
-                startDestination = HearNearScreen.Start.name,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                composable(HearNearScreen.Start.name) {
-                    HomeScreen(nearbyListenersViewModel = nearbyListenersViewModel)
-                }
-                composable(HearNearScreen.Map.name) {
-                    MapScreen(
-                        nearbyListenersViewModel = nearbyListenersViewModel,
-                        navController = navController
-                    )
-                }
-                composable(HearNearScreen.Profile.name) {
-                    UserScreen(
-                        authViewModel = authViewModel,
-                        navController = navController
-                    )
-                }
-
-                composable(HearNearScreen.Login.name) {
-                    LoginScreen(
-                        authViewModel = authViewModel,
-                        onNavigateToRegister = {
-                            navController.navigate(HearNearScreen.Register.name)
-                        }
-                    )
-                }
-                composable(HearNearScreen.Register.name) {
-                    RegisterScreen(
-                        authViewModel = authViewModel,
-                        onNavigateToLogin = {
-                            navController.popBackStack()
-                        },
-                        navController = navController
-                    )
-                }
-                composable(HearNearScreen.PrivacyPolicy.name){
-                    PrivacyPolicy()
-                }
-                composable(HearNearScreen.Statute.name){
-                    Statute()
-                }
-
-                composable(HearNearScreen.OtherProfile.name) {
-                    OtherUserProfile(
-                        nearbyListenersViewModel = nearbyListenersViewModel,
-                        navController = navController
-                    )
-                }
-
+            composable(HearNearScreen.Start.name) {
+                HomeScreen(nearbyListenersViewModel = nearbyListenersViewModel)
+            }
+            composable(HearNearScreen.Map.name) {
+                MapScreen(
+                    nearbyListenersViewModel = nearbyListenersViewModel,
+                    navController = navController
+                )
+            }
+            composable(HearNearScreen.Profile.name) {
+                UserScreen(
+                    authViewModel = authViewModel,
+                    navController = navController
+                )
+            }
+            composable(HearNearScreen.Login.name) {
+                LoginScreen(
+                    authViewModel = authViewModel,
+                    onNavigateToRegister = { navController.navigate(HearNearScreen.Register.name) }
+                )
+            }
+            composable(HearNearScreen.Register.name) {
+                RegisterScreen(
+                    authViewModel = authViewModel,
+                    onNavigateToLogin = { navController.popBackStack() },
+                    navController = navController
+                )
+            }
+            composable(HearNearScreen.PrivacyPolicy.name) { PrivacyPolicy() }
+            composable(HearNearScreen.Statute.name) { Statute() }
+            composable(HearNearScreen.Notifications.name) {
+                NotificationsScreen(
+                    friendsViewModel = friendsViewModel,
+                    snackbarHostState = snackbarHostState
+                )
+            }
+            composable(HearNearScreen.OtherProfile.name) {
+                OtherUserProfile(
+                    nearbyListenersViewModel = nearbyListenersViewModel,
+                    friendsViewModel = friendsViewModel,
+                    navController = navController,
+                    snackbarHostState = snackbarHostState
+                )
             }
         }
-
-        HearNearBottomBar(
-            navController = navController,
-            currentScreen = currentScreen
-        )
     }
 }

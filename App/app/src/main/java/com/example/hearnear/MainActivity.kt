@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hearnear.ui.HearNearApp
 import com.example.hearnear.viewmodel.AuthViewModel
+import com.example.hearnear.viewmodel.FriendsViewModel
 import com.example.hearnear.viewmodel.NearbyListenersViewModel
 import org.maplibre.android.MapLibre
 import org.maplibre.android.WellKnownTileServer
@@ -25,13 +26,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Inicjalizacja MapLibre z kluczem API
         MapLibre.getInstance(
             applicationContext,
             "zJQ3iHNAru3LOgSIwA5p",
             WellKnownTileServer.MapTiler
         )
         hideSystemUI()
+
         setContent {
             MaterialTheme {
                 val authViewModel: AuthViewModel = viewModel {
@@ -40,19 +41,23 @@ class MainActivity : ComponentActivity() {
                 val nearbyListenersViewModel: NearbyListenersViewModel = viewModel {
                     NearbyListenersViewModel(applicationContext)
                 }
+                val friendsViewModel: FriendsViewModel = viewModel {
+                    FriendsViewModel(applicationContext)
+                }
                 val authState by authViewModel.authState.collectAsState()
 
-                // Sprawdź i uruchom NotificationListener gdy użytkownik jest zalogowany
                 LaunchedEffect(authState.isLoggedIn) {
                     if (authState.isLoggedIn) {
                         checkAndEnableNotificationListener()
+                        friendsViewModel.loadPendingRequests()
                     }
                 }
 
                 if (authState.isLoggedIn) {
                     HearNearApp(
                         authViewModel = authViewModel,
-                        nearbyListenersViewModel = nearbyListenersViewModel
+                        nearbyListenersViewModel = nearbyListenersViewModel,
+                        friendsViewModel = friendsViewModel
                     )
                 } else {
                     AuthApp(authViewModel = authViewModel)
@@ -72,10 +77,8 @@ class MainActivity : ComponentActivity() {
                 )
     }
 
-
     private fun checkAndEnableNotificationListener() {
         if (!isNotificationServiceEnabled()) {
-            // Jeśli NotificationListener nie jest włączony, otwórz ustawienia
             val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
             startActivity(intent)
         }
@@ -86,7 +89,6 @@ class MainActivity : ComponentActivity() {
             contentResolver,
             "enabled_notification_listeners"
         )
-        val packageName = packageName
         return enabledListeners?.contains(packageName) == true
     }
 }

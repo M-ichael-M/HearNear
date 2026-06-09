@@ -21,7 +21,7 @@ app.config['UPLOAD_FOLDER'] = os.path.join(app.root_path, 'static', 'avatars')
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 app.config['MAX_CONTENT_LENGTH'] = 3 * 1024 * 1024  # 3 MB max upload
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
-MAX_AVATAR_SIZE = (512, 512)  # max thumbnail size
+MAX_AVATAR_SIZE = (512, 512)
 
 db = SQLAlchemy(app)
 
@@ -32,9 +32,7 @@ class User(db.Model):
     email = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
-    # opcjonalny profil instagramowy (przechowujemy nazwę użytkownika, mała litera)
     instagram_username = db.Column(db.String(30), unique=True, nullable=True)
-    # opcjonalne avatar filename
     avatar_filename = db.Column(db.String(200), unique=False, nullable=True)
 
 
@@ -51,6 +49,28 @@ class UserActivity(db.Model):
     user = db.relationship('User', backref=db.backref('activities', lazy=True))
 
 
+class Friendship(db.Model):
+    """
+    Reprezentuje relację znajomości / zaproszenia między dwoma użytkownikami.
+    requester_id  – kto wysłał zaproszenie
+    addressee_id  – kto je otrzymał
+    status        – 'pending' | 'accepted' | 'declined'
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    requester_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    addressee_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='pending')
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    requester = db.relationship('User', foreign_keys=[requester_id], backref=db.backref('sent_requests', lazy=True))
+    addressee = db.relationship('User', foreign_keys=[addressee_id], backref=db.backref('received_requests', lazy=True))
+
+    __table_args__ = (
+        db.UniqueConstraint('requester_id', 'addressee_id', name='unique_friendship'),
+    )
+
+
 # --- WALIDATORY ---
 def validate_email(email):
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
@@ -58,13 +78,6 @@ def validate_email(email):
 
 
 def validate_instagram_username(username: str) -> bool:
-    """
-    Instagram username rules (approximation):
-    - 1..30 characters
-    - letters, numbers, ., _ allowed
-    - not start or end with dot
-    - no double dots
-    """
     if not username:
         return False
     username = username.strip()
@@ -92,7 +105,6 @@ def token_required(f):
         token = request.headers.get('Authorization')
         if not token:
             return jsonify({'error': 'Token is missing'}), 401
-
         try:
             if token.startswith('Bearer '):
                 token = token[7:]
@@ -102,9 +114,7 @@ def token_required(f):
                 raise Exception("User not found")
         except Exception as e:
             return jsonify({'error': 'Token is invalid', 'details': str(e)}), 401
-
         return f(current_user, *args, **kwargs)
-
     return decorated
 
 
@@ -114,112 +124,76 @@ def allowed_file(filename):
 
 
 def process_and_save_avatar(file_storage, user_id):
-    """
-    Sprawdza rozszerzenie, waliduje obrazek i zapisuje jako webp w upload folder.
-    Zwraca nazwę zapisanego pliku.
-    """
     filename = secure_filename(file_storage.filename)
     if not allowed_file(filename):
         raise ValueError('Bad file extension')
-
-    # Sprawdzenie obrazu (verify), a następnie ponowne otwarcie aby przetworzyć
     try:
         file_storage.stream.seek(0)
         img = Image.open(file_storage.stream)
         img.verify()
     except Exception:
         raise ValueError('Uploaded file is not a valid image')
-
-    # reset stream i ponowne otwarcie (verify() może przesunąć wskaźnik)
     file_storage.stream.seek(0)
     img = Image.open(file_storage.stream).convert('RGB')
-
-    # unikalna nazwa
     base_name = f"user_{user_id}_{int(datetime.datetime.utcnow().timestamp())}"
     out_name = f"{base_name}.webp"
     out_path = os.path.join(app.config['UPLOAD_FOLDER'], out_name)
-
-    # resize i zapis
     img.thumbnail(MAX_AVATAR_SIZE)
     img.save(out_path, format='WEBP', quality=85)
-
     return out_name
 
 
-# --- ENDPOINTY AUTH / REJESTRACJA ---
+def _user_info(user):
+    return {
+        'id': user.id,
+        'nick': user.nick,
+        'email': user.email,
+        'instagram_username': user.instagram_username,
+        'instagram_url': f'https://instagram.com/{user.instagram_username}' if user.instagram_username else None,
+        'avatar_url': f'/avatars/{user.avatar_filename}' if user.avatar_filename else None
+    }
+
+
+# --- ENDPOINTY AUTH ---
 @app.route('/api/register', methods=['POST'])
 def register():
     try:
         data = request.get_json()
-
         if not data or not all(k in data for k in ('nick', 'email', 'password', 'terms_accepted')):
             return jsonify({'error': 'Missing required fields'}), 400
-
         nick = data['nick'].strip()
         email = data['email'].strip().lower()
         password = data['password']
         terms_accepted = data['terms_accepted']
-
         instagram_username = data.get('instagram_username', None)
         if instagram_username:
             instagram_username = instagram_username.strip().lower()
-
         if not terms_accepted:
             return jsonify({'error': 'Terms must be accepted'}), 400
-
         if len(nick) < 3 or len(nick) > 50:
             return jsonify({'error': 'Nick must be between 3 and 50 characters'}), 400
-
         if len(password) < 6:
             return jsonify({'error': 'Password must be at least 6 characters'}), 400
-
         if not validate_email(email):
             return jsonify({'error': 'Invalid email format'}), 400
-
         if User.query.filter_by(nick=nick).first():
             return jsonify({'error': 'Nick already exists'}), 409
-
         if User.query.filter_by(email=email).first():
             return jsonify({'error': 'Email already exists'}), 409
-
         if instagram_username:
             if not validate_instagram_username(instagram_username):
                 return jsonify({'error': 'Invalid Instagram username format'}), 400
-            existing_insta = User.query.filter_by(instagram_username=instagram_username).first()
-            if existing_insta:
+            if User.query.filter_by(instagram_username=instagram_username).first():
                 return jsonify({'error': 'Instagram username already linked to another account'}), 409
-
         password_hash = generate_password_hash(password)
-        new_user = User(
-            nick=nick,
-            email=email,
-            password_hash=password_hash,
-            instagram_username=instagram_username
-        )
-
+        new_user = User(nick=nick, email=email, password_hash=password_hash, instagram_username=instagram_username)
         db.session.add(new_user)
         db.session.commit()
-
         token = jwt.encode({
             'user_id': new_user.id,
             'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30)
         }, app.config['SECRET_KEY'], algorithm='HS256')
-
-        user_info = {
-            'id': new_user.id,
-            'nick': new_user.nick,
-            'email': new_user.email,
-            'instagram_username': new_user.instagram_username,
-            'instagram_url': f'https://instagram.com/{new_user.instagram_username}' if new_user.instagram_username else None,
-            'avatar_url': f'/avatars/{new_user.avatar_filename}' if new_user.avatar_filename else None
-        }
-
-        return jsonify({
-            'message': 'User registered successfully',
-            'token': token,
-            'user': user_info
-        }), 201
-
+        return jsonify({'message': 'User registered successfully', 'token': token, 'user': _user_info(new_user)}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -228,38 +202,18 @@ def register():
 def login():
     try:
         data = request.get_json()
-
         if not data or not all(k in data for k in ('email', 'password')):
             return jsonify({'error': 'Email and password required'}), 400
-
         email = data['email'].strip().lower()
         password = data['password']
-
         user = User.query.filter_by(email=email).first()
-
         if not user or not check_password_hash(user.password_hash, password):
             return jsonify({'error': 'Invalid credentials'}), 401
-
         token = jwt.encode({
             'user_id': user.id,
             'exp': datetime.datetime.utcnow() + datetime.timedelta(days=30)
         }, app.config['SECRET_KEY'], algorithm='HS256')
-
-        user_info = {
-            'id': user.id,
-            'nick': user.nick,
-            'email': user.email,
-            'instagram_username': user.instagram_username,
-            'instagram_url': f'https://instagram.com/{user.instagram_username}' if user.instagram_username else None,
-            'avatar_url': f'/avatars/{user.avatar_filename}' if user.avatar_filename else None
-        }
-
-        return jsonify({
-            'message': 'Login successful',
-            'token': token,
-            'user': user_info
-        }), 200
-
+        return jsonify({'message': 'Login successful', 'token': token, 'user': _user_info(user)}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -267,17 +221,7 @@ def login():
 @app.route('/api/verify-token', methods=['POST'])
 @token_required
 def verify_token(current_user):
-    return jsonify({
-        'valid': True,
-        'user': {
-            'id': current_user.id,
-            'nick': current_user.nick,
-            'email': current_user.email,
-            'instagram_username': current_user.instagram_username,
-            'instagram_url': f'https://instagram.com/{current_user.instagram_username}' if current_user.instagram_username else None,
-            'avatar_url': f'/avatars/{current_user.avatar_filename}' if current_user.avatar_filename else None
-        }
-    }), 200
+    return jsonify({'valid': True, 'user': _user_info(current_user)}), 200
 
 
 @app.route('/api/logout', methods=['POST'])
@@ -286,44 +230,32 @@ def logout(current_user):
     return jsonify({'message': 'Logout successful'}), 200
 
 
-# --- ENDPOINTY DO INSTAGRAMA (dodaj / aktualizuj / usuń) ---
+# --- INSTAGRAM ---
 @app.route('/api/instagram', methods=['POST'])
 @token_required
 def add_or_update_instagram(current_user):
-    """
-    Body: { "instagram_username": "nazwa" }
-    Jeśli pusty string lub null -> usuwa pole (ustawia na None)
-    """
     try:
         data = request.get_json()
         if data is None or 'instagram_username' not in data:
             return jsonify({'error': 'instagram_username is required (or null to remove)'}), 400
-
         insta = data.get('instagram_username')
         if insta is None or (isinstance(insta, str) and insta.strip() == ''):
-            # Usuń
             current_user.instagram_username = None
             db.session.commit()
             return jsonify({'message': 'Instagram profile removed'}), 200
-
         insta = insta.strip().lower()
         if not validate_instagram_username(insta):
             return jsonify({'error': 'Invalid Instagram username format'}), 400
-
-        # Sprawdź czy ktoś inny już nie używa tej nazwy
         other = User.query.filter(User.instagram_username == insta, User.id != current_user.id).first()
         if other:
             return jsonify({'error': 'This Instagram username is already linked to another account'}), 409
-
         current_user.instagram_username = insta
         db.session.commit()
-
         return jsonify({
             'message': 'Instagram username saved',
             'instagram_username': current_user.instagram_username,
             'instagram_url': f'https://instagram.com/{current_user.instagram_username}'
         }), 200
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -341,24 +273,17 @@ def delete_instagram(current_user):
         return jsonify({'error': str(e)}), 500
 
 
-# --- ENDPOINTY DO AVATARÓW (upload / delete / serve) ---
+# --- AVATARY ---
 @app.route('/api/avatar', methods=['POST'])
 @token_required
 def upload_avatar(current_user):
-    """
-    Upload/Update avatar.
-    Body: multipart/form-data z polem 'avatar'
-    """
     try:
         if 'avatar' not in request.files:
             return jsonify({'error': 'No file part'}), 400
         file = request.files['avatar']
         if file.filename == '':
             return jsonify({'error': 'No selected file'}), 400
-
         new_filename = process_and_save_avatar(file, current_user.id)
-
-        # usuń stare avatar jeśli istnieje
         if current_user.avatar_filename:
             try:
                 old_path = os.path.join(app.config['UPLOAD_FOLDER'], current_user.avatar_filename)
@@ -366,13 +291,9 @@ def upload_avatar(current_user):
                     os.remove(old_path)
             except Exception:
                 pass
-
         current_user.avatar_filename = new_filename
         db.session.commit()
-
-        avatar_url = f'/avatars/{new_filename}'
-        return jsonify({'message': 'Avatar uploaded', 'avatar_url': avatar_url}), 200
-
+        return jsonify({'message': 'Avatar uploaded', 'avatar_url': f'/avatars/{new_filename}'}), 200
     except ValueError as ve:
         return jsonify({'error': str(ve)}), 400
     except Exception as e:
@@ -397,11 +318,10 @@ def delete_avatar(current_user):
 
 @app.route('/avatars/<filename>', methods=['GET'])
 def serve_avatar(filename):
-    # publiczny endpoint do serwowania avatarów
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 
-# --- AKTUALIZACJA AKTYWNOŚCI ---
+# --- AKTYWNOŚĆ ---
 @app.route('/api/update-activity', methods=['POST'])
 @token_required
 def update_activity(current_user):
@@ -409,26 +329,17 @@ def update_activity(current_user):
         data = request.get_json()
         required_fields = ['latitude', 'longitude', 'track_name', 'artist_name']
         if not data or not all(k in data for k in required_fields):
-            return jsonify({'error': 'Missing required fields: latitude, longitude, track_name, artist_name'}), 400
-
+            return jsonify({'error': 'Missing required fields'}), 400
         latitude = float(data['latitude'])
         longitude = float(data['longitude'])
         track_name = data['track_name'].strip()
         artist_name = data['artist_name'].strip()
         album_name = data.get('album_name', '').strip() if data.get('album_name') else None
-
         if not (-90 <= latitude <= 90):
             return jsonify({'error': 'Invalid latitude'}), 400
         if not (-180 <= longitude <= 180):
             return jsonify({'error': 'Invalid longitude'}), 400
-
-        if len(track_name) < 1 or len(track_name) > 200:
-            return jsonify({'error': 'Track name must be between 1 and 200 characters'}), 400
-        if len(artist_name) < 1 or len(artist_name) > 200:
-            return jsonify({'error': 'Artist name must be between 1 and 200 characters'}), 400
-
         existing_activity = UserActivity.query.filter_by(user_id=current_user.id).first()
-
         if existing_activity:
             existing_activity.latitude = latitude
             existing_activity.longitude = longitude
@@ -438,36 +349,25 @@ def update_activity(current_user):
             existing_activity.last_updated = datetime.datetime.utcnow()
         else:
             new_activity = UserActivity(
-                user_id=current_user.id,
-                latitude=latitude,
-                longitude=longitude,
-                track_name=track_name,
-                artist_name=artist_name,
-                album_name=album_name
+                user_id=current_user.id, latitude=latitude, longitude=longitude,
+                track_name=track_name, artist_name=artist_name, album_name=album_name
             )
             db.session.add(new_activity)
-
         db.session.commit()
-
         return jsonify({
             'message': 'Activity updated successfully',
             'activity': {
-                'latitude': latitude,
-                'longitude': longitude,
-                'track_name': track_name,
-                'artist_name': artist_name,
-                'album_name': album_name,
-                'last_updated': datetime.datetime.utcnow().isoformat()
+                'latitude': latitude, 'longitude': longitude,
+                'track_name': track_name, 'artist_name': artist_name,
+                'album_name': album_name, 'last_updated': datetime.datetime.utcnow().isoformat()
             }
         }), 200
-
     except ValueError:
         return jsonify({'error': 'Invalid coordinate format'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-# --- LISTA SŁUCHACZY W POBLIŻU (z informacją o IG i avatar jeśli jest) ---
 @app.route('/api/nearby-listeners', methods=['GET'])
 @token_required
 def get_nearby_listeners(current_user):
@@ -475,26 +375,22 @@ def get_nearby_listeners(current_user):
         current_activity = UserActivity.query.filter_by(user_id=current_user.id).first()
         if not current_activity:
             return jsonify({'error': 'User location not found. Please update your activity first.'}), 400
-
         max_distance = request.args.get('max_distance', 50, type=float)
         max_age_minutes = request.args.get('max_age_minutes', 60, type=int)
         cutoff_time = datetime.datetime.utcnow() - datetime.timedelta(minutes=max_age_minutes)
-
         all_activities = UserActivity.query.join(User).filter(
             UserActivity.user_id != current_user.id,
             UserActivity.last_updated >= cutoff_time
         ).all()
-
         nearby_listeners = []
-
         for activity in all_activities:
             distance = calculate_distance(
                 current_activity.latitude, current_activity.longitude,
                 activity.latitude, activity.longitude
             )
-
             if distance <= max_distance:
                 listener_data = {
+                    'user_id': activity.user_id,
                     'email': activity.user.email,
                     'nick': activity.user.nick,
                     'distance_km': round(distance, 2),
@@ -510,9 +406,7 @@ def get_nearby_listeners(current_user):
                     'avatar_url': f'/avatars/{activity.user.avatar_filename}' if activity.user.avatar_filename else None
                 }
                 nearby_listeners.append(listener_data)
-
         nearby_listeners.sort(key=lambda x: x['distance_km'])
-
         return jsonify({
             'listeners': nearby_listeners,
             'total_count': len(nearby_listeners),
@@ -525,7 +419,6 @@ def get_nearby_listeners(current_user):
                 }
             }
         }), 200
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -535,22 +428,17 @@ def get_nearby_listeners(current_user):
 def get_my_activity(current_user):
     try:
         activity = UserActivity.query.filter_by(user_id=current_user.id).first()
-
         if not activity:
             return jsonify({'message': 'No activity found'}), 404
-
         return jsonify({
             'activity': {
-                'latitude': activity.latitude,
-                'longitude': activity.longitude,
-                'track_name': activity.track_name,
-                'artist_name': activity.artist_name,
+                'latitude': activity.latitude, 'longitude': activity.longitude,
+                'track_name': activity.track_name, 'artist_name': activity.artist_name,
                 'album_name': activity.album_name,
                 'last_updated': activity.last_updated.isoformat(),
                 'minutes_ago': int((datetime.datetime.utcnow() - activity.last_updated).total_seconds() / 60)
             }
         }), 200
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -560,15 +448,11 @@ def get_my_activity(current_user):
 def delete_activity(current_user):
     try:
         activity = UserActivity.query.filter_by(user_id=current_user.id).first()
-
         if not activity:
             return jsonify({'message': 'No activity to delete'}), 404
-
         db.session.delete(activity)
         db.session.commit()
-
         return jsonify({'message': 'Activity deleted successfully'}), 200
-
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -578,24 +462,244 @@ def cleanup_old_activities():
     try:
         hours_old = request.json.get('hours_old', 24) if request.json else 24
         cutoff_time = datetime.datetime.utcnow() - datetime.timedelta(hours=hours_old)
-
         old_activities = UserActivity.query.filter(UserActivity.last_updated < cutoff_time).all()
         count = len(old_activities)
-
         for activity in old_activities:
             db.session.delete(activity)
+        db.session.commit()
+        return jsonify({'message': f'Cleaned up {count} old activities', 'deleted_count': count}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
+
+# ============================================================
+# --- SYSTEM ZNAJOMYCH ---
+# ============================================================
+
+def _get_friendship(user_a_id: int, user_b_id: int):
+    """Zwraca rekord Friendship niezależnie od kolejności requester/addressee, lub None."""
+    return Friendship.query.filter(
+        db.or_(
+            db.and_(Friendship.requester_id == user_a_id, Friendship.addressee_id == user_b_id),
+            db.and_(Friendship.requester_id == user_b_id, Friendship.addressee_id == user_a_id)
+        )
+    ).first()
+
+
+def _friendship_status_for(current_user_id: int, other_user_id: int):
+    """
+    Zwraca słownik opisujący stan relacji z perspektywy current_user:
+    {
+      'status': 'none' | 'pending_sent' | 'pending_received' | 'accepted',
+      'friendship_id': int | None
+    }
+    """
+    f = _get_friendship(current_user_id, other_user_id)
+    if f is None:
+        return {'status': 'none', 'friendship_id': None}
+    if f.status == 'accepted':
+        return {'status': 'accepted', 'friendship_id': f.id}
+    if f.status == 'pending':
+        if f.requester_id == current_user_id:
+            return {'status': 'pending_sent', 'friendship_id': f.id}
+        else:
+            return {'status': 'pending_received', 'friendship_id': f.id}
+    # declined – traktujemy jak brak relacji (można wysłać ponownie)
+    return {'status': 'none', 'friendship_id': None}
+
+
+@app.route('/api/friends/request/<int:target_user_id>', methods=['POST'])
+@token_required
+def send_friend_request(current_user, target_user_id):
+    """Wysyła zaproszenie do znajomych."""
+    try:
+        if current_user.id == target_user_id:
+            return jsonify({'error': 'Cannot send friend request to yourself'}), 400
+
+        target = User.query.get(target_user_id)
+        if not target:
+            return jsonify({'error': 'User not found'}), 404
+
+        existing = _get_friendship(current_user.id, target_user_id)
+        if existing:
+            if existing.status == 'accepted':
+                return jsonify({'error': 'Already friends'}), 409
+            if existing.status == 'pending':
+                return jsonify({'error': 'Friend request already pending'}), 409
+            if existing.status == 'declined':
+                # Pozwól wysłać ponownie – usuń stary rekord
+                db.session.delete(existing)
+                db.session.commit()
+
+        friendship = Friendship(
+            requester_id=current_user.id,
+            addressee_id=target_user_id,
+            status='pending'
+        )
+        db.session.add(friendship)
         db.session.commit()
 
         return jsonify({
-            'message': f'Cleaned up {count} old activities',
-            'deleted_count': count
+            'message': 'Friend request sent',
+            'friendship_id': friendship.id,
+            'status': 'pending_sent'
+        }), 201
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/friends/accept/<int:friendship_id>', methods=['POST'])
+@token_required
+def accept_friend_request(current_user, friendship_id):
+    """Akceptuje zaproszenie (tylko adresat może akceptować)."""
+    try:
+        friendship = Friendship.query.get(friendship_id)
+        if not friendship:
+            return jsonify({'error': 'Friend request not found'}), 404
+        if friendship.addressee_id != current_user.id:
+            return jsonify({'error': 'Not authorized to accept this request'}), 403
+        if friendship.status != 'pending':
+            return jsonify({'error': f'Request is already {friendship.status}'}), 409
+
+        friendship.status = 'accepted'
+        friendship.updated_at = datetime.datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({'message': 'Friend request accepted', 'friendship_id': friendship.id}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/friends/decline/<int:friendship_id>', methods=['POST'])
+@token_required
+def decline_friend_request(current_user, friendship_id):
+    """Odrzuca zaproszenie (tylko adresat) lub usuwa ze znajomych (obie strony)."""
+    try:
+        friendship = Friendship.query.get(friendship_id)
+        if not friendship:
+            return jsonify({'error': 'Friend request not found'}), 404
+
+        is_addressee = friendship.addressee_id == current_user.id
+        is_requester = friendship.requester_id == current_user.id
+
+        if not is_addressee and not is_requester:
+            return jsonify({'error': 'Not authorized'}), 403
+
+        db.session.delete(friendship)
+        db.session.commit()
+
+        return jsonify({'message': 'Friend request declined / friendship removed'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/friends/remove/<int:target_user_id>', methods=['DELETE'])
+@token_required
+def remove_friend(current_user, target_user_id):
+    """Usuwa znajomego (działa dla obu stron)."""
+    try:
+        friendship = _get_friendship(current_user.id, target_user_id)
+        if not friendship:
+            return jsonify({'error': 'No friendship found'}), 404
+
+        db.session.delete(friendship)
+        db.session.commit()
+
+        return jsonify({'message': 'Friend removed'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/friends', methods=['GET'])
+@token_required
+def get_friends(current_user):
+    """Zwraca listę zaakceptowanych znajomych."""
+    try:
+        friendships = Friendship.query.filter(
+            db.or_(
+                Friendship.requester_id == current_user.id,
+                Friendship.addressee_id == current_user.id
+            ),
+            Friendship.status == 'accepted'
+        ).all()
+
+        friends = []
+        for f in friendships:
+            friend_user = f.addressee if f.requester_id == current_user.id else f.requester
+            friends.append({
+                'friendship_id': f.id,
+                'user': _user_info(friend_user)
+            })
+
+        return jsonify({'friends': friends, 'total_count': len(friends)}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/friends/pending', methods=['GET'])
+@token_required
+def get_pending_requests(current_user):
+    """
+    Zwraca oczekujące zaproszenia:
+    - received: zaproszenia przysłane DO mnie (do akceptacji)
+    - sent: zaproszenia wysłane PRZEZE mnie
+    """
+    try:
+        received = Friendship.query.filter_by(
+            addressee_id=current_user.id,
+            status='pending'
+        ).all()
+
+        sent = Friendship.query.filter_by(
+            requester_id=current_user.id,
+            status='pending'
+        ).all()
+
+        received_list = []
+        for f in received:
+            received_list.append({
+                'friendship_id': f.id,
+                'from_user': _user_info(f.requester),
+                'created_at': f.created_at.isoformat()
+            })
+
+        sent_list = []
+        for f in sent:
+            sent_list.append({
+                'friendship_id': f.id,
+                'to_user': _user_info(f.addressee),
+                'created_at': f.created_at.isoformat()
+            })
+
+        return jsonify({
+            'received': received_list,
+            'sent': sent_list,
+            'pending_count': len(received_list)
         }), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/friends/status/<int:target_user_id>', methods=['GET'])
+@token_required
+def get_friendship_status(current_user, target_user_id):
+    """Zwraca status relacji z konkretnym użytkownikiem."""
+    try:
+        status_info = _friendship_status_for(current_user.id, target_user_id)
+        return jsonify(status_info), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================
+# --- HEALTH ---
+# ============================================================
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'healthy'}), 200
