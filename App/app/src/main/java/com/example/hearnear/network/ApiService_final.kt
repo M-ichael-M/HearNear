@@ -6,6 +6,22 @@ import retrofit2.http.*
 
 data class LoginRequest(val email: String, val password: String)
 
+data class SearchedUser(
+    val id: Int,
+    val nick: String,
+    val email: String,
+    val instagram_username: String? = null,
+    val instagram_url: String? = null,
+    val avatar_url: String? = null,
+    val friendship_status: String = "none",   // none | pending_sent | pending_received | accepted
+    val friendship_id: Int? = null
+)
+
+data class UserSearchResponse(
+    val users: List<SearchedUser>,
+    val total_count: Int
+)
+
 data class RegisterRequest(
     val nick: String,
     val email: String,
@@ -221,4 +237,17 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Path("targetUserId") targetUserId: Int
     ): Response<FriendshipStatusResponse>
+
+    @GET("api/friends/activity")
+    suspend fun getFriendsActivity(
+        @Header("Authorization") token: String,
+        @Query("max_age_minutes") maxAgeMinutes: Int = 60
+    ): Response<NearbyListenersResponse>
+
+    @GET("api/users/search")
+    suspend fun searchUsers(
+        @Header("Authorization") token: String,
+        @Query("q") query: String,
+        @Query("limit") limit: Int = 20
+    ): Response<UserSearchResponse>
 }

@@ -190,4 +190,6 @@ class FriendsViewModel(private val context: Context) : ViewModel() {
             }
         }
     }
+
+    fun getAuthToken(): String? = getToken()
 }

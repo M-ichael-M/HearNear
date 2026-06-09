@@ -368,6 +368,82 @@ def update_activity(current_user):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/friends/activity', methods=['GET'])
+@token_required
+def get_friends_activity(current_user):
+    """
+    Zwraca aktywność wszystkich zaakceptowanych znajomych,
+    którzy aktualnie udostępniają muzykę (bez limitu odległości).
+    """
+    try:
+        max_age_minutes = request.args.get('max_age_minutes', 60, type=int)
+        cutoff_time = datetime.datetime.utcnow() - datetime.timedelta(minutes=max_age_minutes)
+
+        # Pobierz wszystkich zaakceptowanych znajomych
+        friendships = Friendship.query.filter(
+            db.or_(
+                Friendship.requester_id == current_user.id,
+                Friendship.addressee_id == current_user.id
+            ),
+            Friendship.status == 'accepted'
+        ).all()
+
+        friend_ids = []
+        for f in friendships:
+            fid = f.addressee_id if f.requester_id == current_user.id else f.requester_id
+            friend_ids.append(fid)
+
+        if not friend_ids:
+            return jsonify({
+                'listeners': [],
+                'total_count': 0
+            }), 200
+
+        # Pobierz aktywności znajomych (nie starsze niż max_age_minutes)
+        activities = UserActivity.query.join(User).filter(
+            UserActivity.user_id.in_(friend_ids),
+            UserActivity.last_updated >= cutoff_time
+        ).all()
+
+        # Jeśli aktualny użytkownik ma lokalizację, policz odległość; wpp distance = None
+        current_activity = UserActivity.query.filter_by(user_id=current_user.id).first()
+
+        result = []
+        for activity in activities:
+            distance = None
+            if current_activity:
+                distance = round(calculate_distance(
+                    current_activity.latitude, current_activity.longitude,
+                    activity.latitude, activity.longitude
+                ), 2)
+
+            result.append({
+                'user_id': activity.user_id,
+                'email': activity.user.email,
+                'nick': activity.user.nick,
+                'distance_km': distance if distance is not None else -1,
+                'latitude': activity.latitude,
+                'longitude': activity.longitude,
+                'track_name': activity.track_name,
+                'artist_name': activity.artist_name,
+                'album_name': activity.album_name,
+                'last_updated': activity.last_updated.isoformat(),
+                'minutes_ago': int((datetime.datetime.utcnow() - activity.last_updated).total_seconds() / 60),
+                'instagram_username': activity.user.instagram_username,
+                'instagram_url': f'https://instagram.com/{activity.user.instagram_username}' if activity.user.instagram_username else None,
+                'avatar_url': f'/avatars/{activity.user.avatar_filename}' if activity.user.avatar_filename else None
+            })
+
+        result.sort(key=lambda x: x['distance_km'] if x['distance_km'] >= 0 else float('inf'))
+
+        return jsonify({
+            'listeners': result,
+            'total_count': len(result)
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/nearby-listeners', methods=['GET'])
 @token_required
 def get_nearby_listeners(current_user):
@@ -704,6 +780,40 @@ def get_friendship_status(current_user, target_user_id):
 def health():
     return jsonify({'status': 'healthy'}), 200
 
+
+@app.route('/api/users/search', methods=['GET'])
+@token_required
+def search_users(current_user):
+    """
+    Wyszukuje użytkowników po nicku (case-insensitive, częściowe dopasowanie).
+    ?q=<fraza>&limit=<int>
+    Nie zwraca samego siebie.
+    """
+    try:
+        query = request.args.get('q', '').strip()
+        limit = request.args.get('limit', 20, type=int)
+
+        if len(query) < 2:
+            return jsonify({'error': 'Query must be at least 2 characters'}), 400
+
+        users = User.query.filter(
+            User.nick.ilike(f'%{query}%'),
+            User.id != current_user.id
+        ).limit(limit).all()
+
+        results = []
+        for u in users:
+            status_info = _friendship_status_for(current_user.id, u.id)
+            results.append({
+                **_user_info(u),
+                'friendship_status': status_info['status'],
+                'friendship_id': status_info['friendship_id']
+            })
+
+        return jsonify({'users': results, 'total_count': len(results)}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     with app.app_context():

@@ -93,6 +93,7 @@ def update_activity(token: str):
         time.sleep(SLEEP_SECONDS)
 
 
+
 if __name__ == "__main__":
     # Krok 1: Rejestracja
     if not register():

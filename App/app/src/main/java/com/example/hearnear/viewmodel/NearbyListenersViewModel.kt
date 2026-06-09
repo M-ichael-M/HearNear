@@ -14,11 +14,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+enum class MapFilter { ALL, FRIENDS }
+
 data class NearbyListenersState(
     val listeners: List<NearbyListener> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val lastRefreshTime: Long = 0L
+    val lastRefreshTime: Long = 0L,
+    val mapFilter: MapFilter = MapFilter.ALL
 )
 
 class NearbyListenersViewModel(private val context: Context) : ViewModel() {
@@ -36,12 +39,18 @@ class NearbyListenersViewModel(private val context: Context) : ViewModel() {
         return sharedPrefs.getString("auth_token", null)
     }
 
+    fun setMapFilter(filter: MapFilter) {
+        _state.value = _state.value.copy(mapFilter = filter)
+        when (filter) {
+            MapFilter.ALL -> loadNearbyListeners()
+            MapFilter.FRIENDS -> loadFriendsActivity()
+        }
+    }
+
     fun loadNearbyListeners(maxDistance: Double = 50.0, maxAgeMinutes: Int = 60) {
         val token = getToken()
         if (token == null) {
-            _state.value = _state.value.copy(
-                error = "Not authenticated"
-            )
+            _state.value = _state.value.copy(error = "Not authenticated")
             return
         }
 
@@ -71,12 +80,7 @@ class NearbyListenersViewModel(private val context: Context) : ViewModel() {
                     } catch (e: Exception) {
                         ApiError("Failed to load nearby listeners")
                     }
-
-                    _state.value = _state.value.copy(
-                        isLoading = false,
-                        error = apiError.error
-                    )
-                    Log.e("NearbyVM", "Failed to load nearby listeners: ${apiError.error}")
+                    _state.value = _state.value.copy(isLoading = false, error = apiError.error)
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
@@ -88,21 +92,67 @@ class NearbyListenersViewModel(private val context: Context) : ViewModel() {
         }
     }
 
+    fun loadFriendsActivity(maxAgeMinutes: Int = 60) {
+        val token = getToken()
+        if (token == null) {
+            _state.value = _state.value.copy(error = "Not authenticated")
+            return
+        }
+
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true, error = null)
+
+            try {
+                val response = NetworkModule.apiService.getFriendsActivity(
+                    "Bearer $token",
+                    maxAgeMinutes
+                )
+
+                if (response.isSuccessful) {
+                    val body = response.body()!!
+                    _state.value = _state.value.copy(
+                        listeners = body.listeners,
+                        isLoading = false,
+                        error = null,
+                        lastRefreshTime = System.currentTimeMillis()
+                    )
+                    Log.d("NearbyVM", "Loaded ${body.listeners.size} friends' activities")
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    val apiError = try {
+                        gson.fromJson(errorBody, ApiError::class.java)
+                    } catch (e: Exception) {
+                        ApiError("Failed to load friends activity")
+                    }
+                    _state.value = _state.value.copy(isLoading = false, error = apiError.error)
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = "Network error: ${e.message}"
+                )
+                Log.e("NearbyVM", "loadFriendsActivity error", e)
+            }
+        }
+    }
+
     fun refreshListeners() {
-        loadNearbyListeners()
+        when (_state.value.mapFilter) {
+            MapFilter.ALL -> loadNearbyListeners()
+            MapFilter.FRIENDS -> loadFriendsActivity()
+        }
     }
 
     fun clearError() {
         _state.value = _state.value.copy(error = null)
     }
 
-    // Automatyczne odświeżanie co 30 sekund
     fun startAutoRefresh() {
         viewModelScope.launch {
             while (true) {
-                delay(30000) // 30 sekund
+                delay(30000)
                 if (_state.value.listeners.isNotEmpty()) {
-                    loadNearbyListeners()
+                    refreshListeners()
                 }
             }
         }

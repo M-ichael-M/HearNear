@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
@@ -24,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -36,6 +38,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.hearnear.ui.HearNearScreen
 import com.example.hearnear.viewmodel.AuthViewModel
+import com.example.hearnear.viewmodel.FriendsViewModel
 import kotlinx.coroutines.launch
 import com.example.hearnear.R
 
@@ -44,9 +47,11 @@ import com.example.hearnear.R
 @Composable
 fun UserScreen(
     authViewModel: AuthViewModel? = null,
+    friendsViewModel: FriendsViewModel? = null,
     navController: NavController
 ) {
     val authState by authViewModel?.authState?.collectAsState() ?: remember { mutableStateOf(null) }
+    val friendsState by friendsViewModel?.state?.collectAsState() ?: remember { mutableStateOf(null) }
     val context = LocalContext.current
     val showInstagramDialog = remember { mutableStateOf(false) }
     var instagramInput by remember { mutableStateOf("") }
@@ -56,6 +61,11 @@ fun UserScreen(
         }
     }
     val coroutineScope = rememberCoroutineScope()
+
+    // Odśwież liczbę znajomych przy wejściu na ekran
+    LaunchedEffect(Unit) {
+        friendsViewModel?.loadFriends()
+    }
 
     if (showInstagramDialog.value) {
         AlertDialog(
@@ -92,6 +102,7 @@ fun UserScreen(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // --- Karta profilu ---
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -126,7 +137,7 @@ fun UserScreen(
                     val avatarUrl = authState?.user?.avatar_url
                     if (avatarUrl != null) {
                         AsyncImage(
-                            model = "http://192.168.1.30:5000$avatarUrl",  // Dopasuj BASE_URL
+                            model = "http://192.168.1.30:5000$avatarUrl",
                             contentDescription = "Awatar użytkownika",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
@@ -163,9 +174,86 @@ fun UserScreen(
                     fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                // --- Licznik znajomych ---
+                Spacer(modifier = Modifier.height(20.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val friendsCount = friendsState?.friends?.size ?: 0
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Kafelek znajomych
+                    Surface(
+                        onClick = { navController.navigate(HearNearScreen.Friends.name) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Znajomi",
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Text(
+                                        text = if (friendsCount == 1) "1 osoba" else "$friendsCount osób",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                            Icon(
+                                painter = painterResource(id = R.drawable.outline_arrow_back_24),
+                                contentDescription = "Przejdź do znajomych",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .rotate(180f)
+                            )
+                        }
+                    }
+
+                    // Przycisk wyszukiwania
+                    Surface(
+                        onClick = { navController.navigate(HearNearScreen.UserSearch.name) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.size(64.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Szukaj użytkowników",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
 
+        // --- Karta: Informacje o koncie ---
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -189,7 +277,7 @@ fun UserScreen(
                     value = authState?.user?.nick ?: "Brak danych"
                 )
 
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                 UserInfoItem(
                     icon = Icons.Default.Email,
@@ -197,7 +285,7 @@ fun UserScreen(
                     value = authState?.user?.email ?: "Brak danych"
                 )
 
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                 Row(
                     modifier = Modifier
@@ -211,7 +299,7 @@ fun UserScreen(
                     Icon(
                         painter = painterResource(id = R.drawable.instagram2),
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary, // jeśli chcesz kolorować ikonę
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(16.dp))
@@ -246,6 +334,7 @@ fun UserScreen(
             }
         }
 
+        // --- Karta: Opcje ---
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -271,7 +360,7 @@ fun UserScreen(
                     }
                 )
 
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                 UserActionItem(
                     icon = Icons.Default.Info,
@@ -281,7 +370,7 @@ fun UserScreen(
                     }
                 )
 
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                 UserActionItem(
                     icon = Icons.Default.ExitToApp,
@@ -294,6 +383,7 @@ fun UserScreen(
             }
         }
 
+        // --- Stopka ---
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),

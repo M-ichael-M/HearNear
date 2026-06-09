@@ -47,6 +47,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.hearnear.R
+import com.example.hearnear.ui.screens.FriendsScreen
+import com.example.hearnear.ui.screens.UserSearchScreen
 import com.example.hearnear.ui.screens.HomeScreen
 import com.example.hearnear.ui.screens.LoginScreen
 import com.example.hearnear.ui.screens.MapScreen
@@ -69,7 +71,9 @@ enum class HearNearScreen(@StringRes val title: Int, @DrawableRes val imageRes: 
     PrivacyPolicy(title = R.string.privacy_policy, imageRes = R.drawable.rounded_person_24),
     Statute(title = R.string.statute, imageRes = R.drawable.outline_error_24),
     OtherProfile(title = R.string.other_profile, imageRes = R.drawable.rounded_person_24),
-    Notifications(title = R.string.notifications, imageRes = R.drawable.outline_home_24)
+    Notifications(title = R.string.notifications, imageRes = R.drawable.outline_home_24),
+    Friends(title = R.string.friends, imageRes = R.drawable.rounded_person_24)
+    ,UserSearch(title = R.string.user_search, imageRes = R.drawable.sharp_person_search_24)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,6 +93,8 @@ fun HearNearAppBar(
                     HearNearScreen.Login -> "Logowanie"
                     HearNearScreen.Register -> "Rejestracja"
                     HearNearScreen.Notifications -> "Powiadomienia"
+                    HearNearScreen.Friends -> "Znajomi"
+                    HearNearScreen.UserSearch -> "Szukaj użytkowników"
                     else -> stringResource(currentScreen.title)
                 },
                 color = MaterialTheme.colorScheme.onPrimary
@@ -110,7 +116,6 @@ fun HearNearAppBar(
             }
         },
         actions = {
-            // Dzwonek z odznaczką – ukryj na ekranie powiadomień
             if (currentScreen != HearNearScreen.Notifications &&
                 currentScreen != HearNearScreen.Login &&
                 currentScreen != HearNearScreen.Register
@@ -222,7 +227,6 @@ fun HearNearApp(
     val friendsState by friendsViewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Odśwież powiadomienia przy starcie i gdy wrócisz na dowolny ekran
     LaunchedEffect(Unit) {
         friendsViewModel.loadPendingRequests()
     }
@@ -266,6 +270,7 @@ fun HearNearApp(
             composable(HearNearScreen.Profile.name) {
                 UserScreen(
                     authViewModel = authViewModel,
+                    friendsViewModel = friendsViewModel,
                     navController = navController
                 )
             }
@@ -294,6 +299,21 @@ fun HearNearApp(
                 OtherUserProfile(
                     nearbyListenersViewModel = nearbyListenersViewModel,
                     friendsViewModel = friendsViewModel,
+                    navController = navController,
+                    snackbarHostState = snackbarHostState
+                )
+            }
+            composable(HearNearScreen.Friends.name) {
+                FriendsScreen(
+                    friendsViewModel = friendsViewModel,
+                    nearbyListenersViewModel = nearbyListenersViewModel,
+                    navController = navController
+                )
+            }
+            composable(HearNearScreen.UserSearch.name) {
+                UserSearchScreen(
+                    friendsViewModel = friendsViewModel,
+                    nearbyListenersViewModel = nearbyListenersViewModel,
                     navController = navController,
                     snackbarHostState = snackbarHostState
                 )

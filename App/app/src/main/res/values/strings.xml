@@ -11,4 +11,6 @@
     <string name="statute">Statute</string>
     <string name="other_profile">Other profile</string>
     <string name="notifications">Notifications</string>
+    <string name="friends">Znajomi</string>
+    <string name="user_search">Szukaj użytkowników</string>
 </resources>
