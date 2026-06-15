@@ -1,6 +1,7 @@
 package com.example.hearnear.ui.screens
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -59,9 +60,20 @@ fun MapScreen(
     navController: NavController
 ) {
     val state by nearbyListenersViewModel.state.collectAsState()
+    val context = LocalContext.current
+
+    // Odczytaj aktualną widoczność z SharedPrefs, żeby wiedzieć czy chip "All" ma być dostępny
+    val sharedPrefs = remember {
+        context.getSharedPreferences("music_sharing_prefs", Context.MODE_PRIVATE)
+    }
+    val savedVisibility = sharedPrefs.getString("music_visibility", "none") ?: "none"
+    // Chip "All" aktywny tylko gdy użytkownik ustawił widoczność "everyone"
+    val canShowAll = savedVisibility == "everyone"
+
     MapLibreScreen(
         listeners = state.listeners,
         activeFilter = state.mapFilter,
+        canShowAll = canShowAll,
         nearbyListenersViewModel = nearbyListenersViewModel,
         navController = navController
     )
@@ -71,17 +83,23 @@ fun MapScreen(
 fun MapLibreScreen(
     listeners: List<NearbyListener>,
     activeFilter: MapFilter,
+    canShowAll: Boolean,
     nearbyListenersViewModel: NearbyListenersViewModel,
     navController: NavController
 ) {
     val context = LocalContext.current
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
-    val mapView = remember {
-        MapView(context).apply { onCreate(null) }
-    }
+    val mapView = remember { MapView(context).apply { onCreate(null) } }
     val symbolManagerState = remember { mutableStateOf<SymbolManager?>(null) }
     val listenerSymbols = remember { mutableStateOf<List<Symbol>>(emptyList()) }
     val selectedListener = remember { mutableStateOf<NearbyListener?>(null) }
+
+    // Jeśli widoczność zmieniła się na nie-everyone, wymuś filtr FRIENDS
+    LaunchedEffect(canShowAll) {
+        if (!canShowAll && activeFilter == MapFilter.ALL) {
+            nearbyListenersViewModel.setMapFilter(MapFilter.FRIENDS)
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // --- Mapa ---
@@ -111,9 +129,7 @@ fun MapLibreScreen(
                                 location?.let {
                                     val userLocation = LatLng(it.latitude, it.longitude)
                                     map.cameraPosition = CameraPosition.Builder()
-                                        .target(userLocation)
-                                        .zoom(14.0)
-                                        .build()
+                                        .target(userLocation).zoom(14.0).build()
                                     symbolManager.create(
                                         SymbolOptions()
                                             .withLatLng(userLocation)
@@ -177,14 +193,19 @@ fun MapLibreScreen(
                 .padding(top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            // "All" dostępne tylko gdy widoczność = everyone
             MapFilterChip(
                 label = "All",
                 selected = activeFilter == MapFilter.ALL,
-                onClick = { nearbyListenersViewModel.setMapFilter(MapFilter.ALL) }
+                enabled = canShowAll,
+                onClick = {
+                    if (canShowAll) nearbyListenersViewModel.setMapFilter(MapFilter.ALL)
+                }
             )
             MapFilterChip(
                 label = "Friends",
                 selected = activeFilter == MapFilter.FRIENDS,
+                enabled = true,
                 selectedColor = Color(0xFF2E7D32),
                 onClick = { nearbyListenersViewModel.setMapFilter(MapFilter.FRIENDS) }
             )
@@ -199,28 +220,20 @@ fun MapLibreScreen(
                     Column {
                         Text("Utwór: ${listener.track_name}")
                         Text("Artysta: ${listener.artist_name}")
-                        if (listener.album_name?.isNotEmpty() == true) {
-                            Text("Album: ${listener.album_name}")
-                        }
-                        if (listener.distance_km >= 0) {
-                            Text("Odległość: ${String.format("%.1f", listener.distance_km)} km")
-                        }
+                        if (listener.album_name?.isNotEmpty() == true) Text("Album: ${listener.album_name}")
+                        if (listener.distance_km >= 0) Text("Odległość: ${String.format("%.1f", listener.distance_km)} km")
                         Text("Ostatnia aktualizacja: ${if (listener.minutes_ago == 0) "Teraz" else "${listener.minutes_ago} min temu"}")
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { selectedListener.value = null }) {
-                        Text("Zamknij")
-                    }
+                    TextButton(onClick = { selectedListener.value = null }) { Text("Zamknij") }
                 },
                 dismissButton = {
                     TextButton(onClick = {
                         nearbyListenersViewModel._selectedListener.value = listener
                         selectedListener.value = null
                         navController.navigate(HearNearScreen.OtherProfile.name)
-                    }) {
-                        Text("Zobacz profil")
-                    }
+                    }) { Text("Zobacz profil") }
                 }
             )
         }
@@ -238,27 +251,37 @@ fun MapLibreScreen(
 private fun MapFilterChip(
     label: String,
     selected: Boolean,
+    enabled: Boolean = true,
     selectedColor: Color = MaterialTheme.colorScheme.primary,
     onClick: () -> Unit
 ) {
     val bgColor by animateColorAsState(
-        targetValue = if (selected) selectedColor else Color.White,
+        targetValue = when {
+            !enabled -> Color(0xFFE0E0E0)           // wyszarzone
+            selected -> selectedColor
+            else -> Color.White
+        },
         animationSpec = tween(200),
         label = "chip_bg"
     )
     val textColor by animateColorAsState(
-        targetValue = if (selected) Color.White else Color(0xFF333333),
+        targetValue = when {
+            !enabled -> Color(0xFF9E9E9E)            // wyszarzone
+            selected -> Color.White
+            else -> Color(0xFF333333)
+        },
         animationSpec = tween(200),
         label = "chip_text"
     )
 
     Surface(
         onClick = onClick,
+        enabled = enabled,
         shape = RoundedCornerShape(20.dp),
         color = bgColor,
-        shadowElevation = 4.dp,
+        shadowElevation = if (enabled) 4.dp else 1.dp,
         modifier = Modifier.shadow(
-            elevation = 4.dp,
+            elevation = if (enabled) 4.dp else 1.dp,
             shape = RoundedCornerShape(20.dp)
         )
     ) {

@@ -55,37 +55,27 @@ class MusicTrackingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, createNotification())
-        startLocationUpdates()
         Log.d("MusicService", "Service started")
         return START_STICKY
     }
 
-    private fun startLocationUpdates() {
-        // Nie robimy nic - czekamy na sygnał od NotificationListener
-        Log.d("MusicService", "Service ready to receive music updates")
-    }
-
     fun updateMusicActivity(musicData: MusicData) {
-        if (isSharingEnabled()) {
-            serviceScope.launch {
-                activityViewModel?.updateActivity(musicData)
-                Log.d("MusicService", "Updated activity from notification: ${musicData.trackName}")
-            }
+        val visibility = getVisibility()
+        if (visibility == "none") {
+            Log.d("MusicService", "Visibility=none, skipping update")
+            return
+        }
+        // Nadpisz visibility z prefs (MusicData może mieć stary stan)
+        val dataWithVisibility = musicData.copy(visibility = visibility)
+        serviceScope.launch {
+            activityViewModel?.updateActivity(dataWithVisibility)
+            Log.d("MusicService", "Updated activity – visibility=$visibility")
         }
     }
 
-    private fun isSharingEnabled(): Boolean {
-        return sharedPrefs.getBoolean("music_sharing_enabled", false)
-    }
-
-    private fun getCurrentMusicFromPrefs(): MusicData? {
-        val trackName = sharedPrefs.getString("current_track", null)
-        val artistName = sharedPrefs.getString("current_artist", null)
-        val albumName = sharedPrefs.getString("current_album", null)
-
-        return if (trackName != null && artistName != null) {
-            MusicData(trackName, artistName, albumName)
-        } else null
+    /** Odczytuje aktualną widoczność z SharedPreferences. */
+    private fun getVisibility(): String {
+        return sharedPrefs.getString("music_visibility", "everyone") ?: "everyone"
     }
 
     private fun createNotification(): Notification {
@@ -107,7 +97,6 @@ class MusicTrackingService : Service() {
                 description = "Keeps music tracking active"
                 setShowBadge(false)
             }
-
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }

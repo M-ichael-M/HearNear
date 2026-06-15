@@ -33,11 +33,14 @@ class NearbyListenersViewModel(private val context: Context) : ViewModel() {
     val selectedListener: StateFlow<NearbyListener?> = _selectedListener.asStateFlow()
 
     private val sharedPrefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+    private val musicPrefs = context.getSharedPreferences("music_sharing_prefs", Context.MODE_PRIVATE)
     private val gson = Gson()
 
-    private fun getToken(): String? {
-        return sharedPrefs.getString("auth_token", null)
-    }
+    private fun getToken(): String? = sharedPrefs.getString("auth_token", null)
+
+    /** Odczytuje aktualną widoczność ustawioną przez użytkownika. */
+    private fun getSavedVisibility(): String =
+        musicPrefs.getString("music_visibility", "none") ?: "none"
 
     fun setMapFilter(filter: MapFilter) {
         _state.value = _state.value.copy(mapFilter = filter)
@@ -56,14 +59,10 @@ class NearbyListenersViewModel(private val context: Context) : ViewModel() {
 
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
-
             try {
                 val response = NetworkModule.apiService.getNearbyListeners(
-                    "Bearer $token",
-                    maxDistance,
-                    maxAgeMinutes
+                    "Bearer $token", maxDistance, maxAgeMinutes
                 )
-
                 if (response.isSuccessful) {
                     val nearbyResponse = response.body()!!
                     _state.value = _state.value.copy(
@@ -74,19 +73,11 @@ class NearbyListenersViewModel(private val context: Context) : ViewModel() {
                     )
                     Log.d("NearbyVM", "Loaded ${nearbyResponse.listeners.size} nearby listeners")
                 } else {
-                    val errorBody = response.errorBody()?.string()
-                    val apiError = try {
-                        gson.fromJson(errorBody, ApiError::class.java)
-                    } catch (e: Exception) {
-                        ApiError("Failed to load nearby listeners")
-                    }
+                    val apiError = parseError(response.errorBody()?.string())
                     _state.value = _state.value.copy(isLoading = false, error = apiError.error)
                 }
             } catch (e: Exception) {
-                _state.value = _state.value.copy(
-                    isLoading = false,
-                    error = "Network error: ${e.message}"
-                )
+                _state.value = _state.value.copy(isLoading = false, error = "Network error: ${e.message}")
                 Log.e("NearbyVM", "Network error", e)
             }
         }
@@ -101,13 +92,8 @@ class NearbyListenersViewModel(private val context: Context) : ViewModel() {
 
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
-
             try {
-                val response = NetworkModule.apiService.getFriendsActivity(
-                    "Bearer $token",
-                    maxAgeMinutes
-                )
-
+                val response = NetworkModule.apiService.getFriendsActivity("Bearer $token", maxAgeMinutes)
                 if (response.isSuccessful) {
                     val body = response.body()!!
                     _state.value = _state.value.copy(
@@ -118,28 +104,24 @@ class NearbyListenersViewModel(private val context: Context) : ViewModel() {
                     )
                     Log.d("NearbyVM", "Loaded ${body.listeners.size} friends' activities")
                 } else {
-                    val errorBody = response.errorBody()?.string()
-                    val apiError = try {
-                        gson.fromJson(errorBody, ApiError::class.java)
-                    } catch (e: Exception) {
-                        ApiError("Failed to load friends activity")
-                    }
+                    val apiError = parseError(response.errorBody()?.string())
                     _state.value = _state.value.copy(isLoading = false, error = apiError.error)
                 }
             } catch (e: Exception) {
-                _state.value = _state.value.copy(
-                    isLoading = false,
-                    error = "Network error: ${e.message}"
-                )
+                _state.value = _state.value.copy(isLoading = false, error = "Network error: ${e.message}")
                 Log.e("NearbyVM", "loadFriendsActivity error", e)
             }
         }
     }
 
+    /**
+     * Odświeża listę używając aktualnej widoczności z SharedPrefs.
+     * Dzięki temu przycisk "odśwież" na HomeScreen zawsze robi właściwy request.
+     */
     fun refreshListeners() {
-        when (_state.value.mapFilter) {
-            MapFilter.ALL -> loadNearbyListeners()
-            MapFilter.FRIENDS -> loadFriendsActivity()
+        when (getSavedVisibility()) {
+            "everyone" -> loadNearbyListeners()
+            else -> loadFriendsActivity()
         }
     }
 
@@ -151,10 +133,20 @@ class NearbyListenersViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             while (true) {
                 delay(30000)
-                if (_state.value.listeners.isNotEmpty()) {
-                    refreshListeners()
+                // Auto-odświeżanie też respektuje aktualną widoczność
+                when (getSavedVisibility()) {
+                    "everyone" -> loadNearbyListeners()
+                    else -> loadFriendsActivity()
                 }
             }
+        }
+    }
+
+    private fun parseError(body: String?): ApiError {
+        return try {
+            gson.fromJson(body, ApiError::class.java)
+        } catch (e: Exception) {
+            ApiError("Nieznany błąd")
         }
     }
 }

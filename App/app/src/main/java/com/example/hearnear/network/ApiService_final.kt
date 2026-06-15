@@ -13,7 +13,7 @@ data class SearchedUser(
     val instagram_username: String? = null,
     val instagram_url: String? = null,
     val avatar_url: String? = null,
-    val friendship_status: String = "none",   // none | pending_sent | pending_received | accepted
+    val friendship_status: String = "none",
     val friendship_id: Int? = null
 )
 
@@ -54,12 +54,17 @@ data class InstagramResponse(
 
 data class AvatarResponse(val message: String, val avatar_url: String?)
 
+/**
+ * visibility: "none" | "friends" | "everyone"
+ * Domyślnie "everyone" dla kompatybilności wstecznej.
+ */
 data class UpdateActivityRequest(
     val latitude: Double,
     val longitude: Double,
     val track_name: String,
     val artist_name: String,
-    val album_name: String? = null
+    val album_name: String? = null,
+    val visibility: String = "everyone"
 )
 
 data class ActivityResponse(val message: String, val activity: ActivityData)
@@ -70,13 +75,10 @@ data class ActivityData(
     val track_name: String,
     val artist_name: String,
     val album_name: String?,
-    val last_updated: String
+    val last_updated: String,
+    val visibility: String = "everyone"
 )
 
-/**
- * user_id dodane – backend musi je zwracać w /api/nearby-listeners.
- * Pole jest nullable dla kompatybilności wstecznej z wcześniejszą wersją serwera.
- */
 data class NearbyListener(
     val user_id: Int? = null,
     val email: String,
@@ -97,7 +99,7 @@ data class NearbyListener(
 data class NearbyListenersResponse(
     val listeners: List<NearbyListener>,
     val total_count: Int,
-    val search_params: SearchParams
+    val search_params: SearchParams? = null
 )
 
 data class SearchParams(

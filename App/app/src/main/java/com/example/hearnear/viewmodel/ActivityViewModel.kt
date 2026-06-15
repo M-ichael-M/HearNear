@@ -15,10 +15,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * visibility:
+ *   "none"     – niewidoczny
+ *   "friends"  – widoczny tylko dla znajomych
+ *   "everyone" – widoczny dla wszystkich
+ */
 data class MusicData(
     val trackName: String,
     val artistName: String,
-    val albumName: String? = null
+    val albumName: String? = null,
+    val visibility: String = "everyone"
 )
 
 data class ActivityState(
@@ -43,9 +50,7 @@ class ActivityViewModel(private val context: Context) : ViewModel() {
     fun updateActivity(musicData: MusicData) {
         val token = getToken()
         if (token == null) {
-            _activityState.value = _activityState.value.copy(
-                error = "Not authenticated"
-            )
+            _activityState.value = _activityState.value.copy(error = "Not authenticated")
             return
         }
 
@@ -67,13 +72,11 @@ class ActivityViewModel(private val context: Context) : ViewModel() {
                         longitude = locationData.longitude,
                         track_name = musicData.trackName,
                         artist_name = musicData.artistName,
-                        album_name = musicData.albumName
+                        album_name = musicData.albumName,
+                        visibility = musicData.visibility
                     )
 
-                    val response = NetworkModule.apiService.updateActivity(
-                        "Bearer $token",
-                        request
-                    )
+                    val response = NetworkModule.apiService.updateActivity("Bearer $token", request)
 
                     if (response.isSuccessful) {
                         val activityResponse = response.body()!!
@@ -82,7 +85,7 @@ class ActivityViewModel(private val context: Context) : ViewModel() {
                             lastActivity = activityResponse.activity,
                             error = null
                         )
-                        Log.d("ActivityVM", "Activity updated successfully")
+                        Log.d("ActivityVM", "Activity updated – visibility=${musicData.visibility}")
                     } else {
                         val errorBody = response.errorBody()?.string()
                         val apiError = try {
@@ -90,12 +93,11 @@ class ActivityViewModel(private val context: Context) : ViewModel() {
                         } catch (e: Exception) {
                             ApiError("Failed to update activity")
                         }
-
                         _activityState.value = _activityState.value.copy(
                             isUpdating = false,
                             error = apiError.error
                         )
-                        Log.e("ActivityVM", "Failed to update activity: ${apiError.error}")
+                        Log.e("ActivityVM", "Failed to update: ${apiError.error}")
                     }
                 } catch (e: Exception) {
                     _activityState.value = _activityState.value.copy(
